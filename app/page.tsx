@@ -14,12 +14,18 @@ import { BrokerWeeklyDonutChart } from "@/components/broker-weekly-donut-chart"
 import { WeekdayChartWithFilter } from "@/components/weekday-chart-with-filter"
 import { BrokerActivityHeatmap } from "@/components/broker-activity-heatmap"
 import { AcquisitionTimeAnalysis } from "@/components/acquisition-time-analysis"
-import { WeeklyAnalysis, WeeklyOverallAverage, WeeklyAnalysisComments } from "@/components/weekly-analysis"
+import { WeeklyAnalysis, WeeklyOverallAverage } from "@/components/weekly-analysis"
 import { ExcelUpload } from "@/components/excel-upload"
+import { AccountSwitcher } from "@/components/ui/platform-switcher"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RefreshCw, Upload, Maximize, Minimize } from "lucide-react"
+import { LifeCarDailyTrends } from "@/components/lifecar-daily-trends"
+import { LifeCarMonthlySummary } from "@/components/lifecar-monthly-summary"
+import { LifeCarOverviewStats } from "@/components/lifecar-overview-stats"
+import { LifeCarPerformanceHeatmap } from "@/components/lifecar-performance-heatmap"
+import { parseLifeCarData, aggregateByMonth, filterByDateRange, type LifeCarDailyData, type LifeCarMonthlyData } from "@/lib/lifecar-data-processor"
 // 移除静态导入，改为动态API调用
 
 // 处理日期格式 - 将各种日期格式转换为标准格式
@@ -202,10 +208,18 @@ export default function Home() {
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
+  // 账号筛选状态
+  const [selectedAccount, setSelectedAccount] = useState('xiaowang');
+  
   // 日期范围状态（替代之前的dateRange）
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [error, setError] = useState('');
+
+  // 账号切换处理函数
+  const handleAccountChange = (account: string) => {
+    setSelectedAccount(account);
+  };
 
   // 时间筛选器处理函数
   const handleApplyFilter = () => {
@@ -243,6 +257,11 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
 
+  // LifeCAR数据状态
+  const [lifeCarData, setLifeCarData] = useState<LifeCarDailyData[]>([]);
+  const [lifeCarMonthlyData, setLifeCarMonthlyData] = useState<LifeCarMonthlyData[]>([]);
+  const [lifeCarLoading, setLifeCarLoading] = useState(false);
+
   // 加载数据函数
   const loadData = async () => {
     try {
@@ -277,9 +296,33 @@ export default function Home() {
     }
   };
 
+  // 加载LifeCAR数据函数
+  const loadLifeCarData = async () => {
+    try {
+      setLifeCarLoading(true);
+      const response = await fetch('/database_lifecar/lifecar-data.csv');
+      if (!response.ok) {
+        throw new Error(`Failed to load LifeCAR data: ${response.statusText}`);
+      }
+      const csvText = await response.text();
+      const parsedData = parseLifeCarData(csvText);
+      const monthlyData = aggregateByMonth(parsedData);
+      
+      setLifeCarData(parsedData);
+      setLifeCarMonthlyData(monthlyData);
+    } catch (error) {
+      console.error('Failed to load LifeCAR data:', error);
+      setLifeCarData([]);
+      setLifeCarMonthlyData([]);
+    } finally {
+      setLifeCarLoading(false);
+    }
+  };
+
   // 页面加载时获取数据
   useEffect(() => {
     loadData();
+    loadLifeCarData();
   }, []);
 
   // Handle successful upload - use uploaded data directly
@@ -389,14 +432,28 @@ export default function Home() {
     };
   }, []); // 移除依赖数组中的isFullscreen
   
-  // 模块配置
-  const modules = [
-    { id: 'broker', name: 'Broker Distribution', icon: '📊', desc: 'Broker performance analysis' },
-    { id: 'cost', name: 'Cost & Leads', icon: '💰', desc: 'Cost comparison analysis' },
-    { id: 'activity-heatmap', name: 'Activity Heatmap', icon: '🔥', desc: 'Broker activity patterns' },
-    { id: 'time-analysis', name: 'Time Analysis', icon: '⏰', desc: 'Acquisition time distribution' },
-    { id: 'weekly-analysis', name: 'Weekly Analysis', icon: '📈', desc: 'Weekly performance insights' }
-  ];
+  // 模块配置 - 根据不同账号显示不同的模块
+  const getModulesForAccount = (account: string) => {
+    if (account === 'lifecar') {
+      return [
+        { id: 'broker', name: 'Campaign Overview', icon: '🚗', desc: 'Overall campaign performance' },
+        { id: 'cost', name: 'Cost Analysis', icon: '💰', desc: 'Spend and efficiency metrics' },
+        { id: 'activity-heatmap', name: 'Performance Heatmap', icon: '🔥', desc: 'Time-based performance patterns' },
+        { id: 'time-analysis', name: 'Engagement Analysis', icon: '⏰', desc: 'Interaction and reach trends' },
+        { id: 'weekly-analysis', name: 'Comprehensive Report', icon: '📈', desc: 'Complete performance analysis' }
+      ];
+    } else {
+      return [
+        { id: 'broker', name: 'Broker Distribution', icon: '📊', desc: 'Broker performance analysis' },
+        { id: 'cost', name: 'Cost & Leads', icon: '💰', desc: 'Cost comparison analysis' },
+        { id: 'activity-heatmap', name: 'Activity Heatmap', icon: '🔥', desc: 'Broker activity patterns' },
+        { id: 'time-analysis', name: 'Time Analysis', icon: '⏰', desc: 'Acquisition time distribution' },
+        { id: 'weekly-analysis', name: 'Weekly Analysis', icon: '📈', desc: 'Weekly performance insights' }
+      ];
+    }
+  };
+
+  const modules = getModulesForAccount(selectedAccount);
   
   // 获取数据（受全局时间筛选器影响）
   const processedBrokerData = useMemo(() => {
@@ -437,6 +494,17 @@ export default function Home() {
     if (isLoading || !processedBrokerData) return 0;
     return processedBrokerData.length
   }, [processedBrokerData, isLoading])
+
+  // 处理LifeCAR数据（受时间筛选器影响）
+  const filteredLifeCarData = useMemo(() => {
+    if (lifeCarLoading || !lifeCarData.length) return [];
+    return filterByDateRange(lifeCarData, startDate, endDate);
+  }, [lifeCarData, startDate, endDate, lifeCarLoading])
+
+  const filteredLifeCarMonthlyData = useMemo(() => {
+    if (lifeCarLoading || !filteredLifeCarData.length) return [];
+    return aggregateByMonth(filteredLifeCarData);
+  }, [filteredLifeCarData, lifeCarLoading])
 
   // 如果正在加载，显示加载状态
   if (isLoading) {
@@ -486,7 +554,11 @@ export default function Home() {
               <h1 className="text-4xl font-semibold bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">Marketing Dashboard</h1>
               <p className="text-base text-purple-600 mt-1 font-montserrat font-light">Real-time analytics & insights</p>
             </div>
-            <div className="ml-auto flex items-center space-x-2 z-50 relative">
+            <div className="ml-auto flex items-center space-x-3 z-50 relative">
+              <AccountSwitcher 
+                onAccountChange={handleAccountChange} 
+                defaultAccount={selectedAccount} 
+              />
               <button
                 onClick={handleFullscreen}
                 className="flex items-center justify-center w-8 h-8 text-gray-700 bg-white/90 backdrop-blur-sm border border-purple-200 rounded hover:border-purple-300 hover:bg-purple-50 transition-all duration-200 shadow-sm cursor-pointer z-50 relative"
@@ -521,6 +593,195 @@ export default function Home() {
       
       {/* 主内容区域 */}
       <div className="w-full px-8 py-4">
+        
+        {/* LifeCAR账号的数据面板 */}
+        {selectedAccount === 'lifecar' && (
+          <>
+            {/* 时间筛选器 - 独立卡片设计 */}
+            <div className="max-w-7xl mx-auto mb-6">
+              <div className="bg-white/95 backdrop-blur-xl rounded-lg shadow-xl shadow-purple-500/10 ring-1 ring-purple-500/20 p-6">
+                {/* 主体标签 */}
+                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200">
+                  <div className="p-2 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
+                    <CalendarIcon className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-800 font-montserrat">Time Filters</h3>
+                </div>
+                
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700 flex items-center gap-2 font-montserrat">
+                      <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+                      Start Date
+                    </label>
+                    <Input
+                      id="start-date"
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      min="2025-05-01"
+                      max="2025-12-31"
+                      className="w-full justify-start text-left font-normal bg-white border-gray-300 text-gray-800 focus:border-purple-500 focus:ring-purple-500/20 transition-all duration-200 hover:bg-gray-50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700 flex items-center gap-2 font-montserrat">
+                      <div className="w-2 h-2 bg-pink-600 rounded-full"></div>
+                      End Date
+                    </label>
+                    <Input
+                      id="end-date"
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      min="2025-05-01"
+                      max="2025-12-31"
+                      className="w-full justify-start text-left font-normal bg-white border-gray-300 text-gray-800 focus:border-pink-500 focus:ring-pink-500/20 transition-all duration-200 hover:bg-gray-50"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button 
+                      onClick={handleClearFilter} 
+                      variant="outline" 
+                      className="w-full bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400 transition-all duration-200 font-semibold"
+                    >
+                      Clear Dates
+                    </Button>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Button 
+                      onClick={handleLastWeek} 
+                      variant="secondary"
+                      className="bg-purple-100 text-purple-700 hover:bg-purple-200 transition-all duration-200 font-semibold"
+                    >
+                      Last Week
+                    </Button>
+                    <Button 
+                      onClick={handleApplyFilter} 
+                      className="bg-gradient-to-r from-[#751FAE] to-[#EF3C99] hover:from-[#6919A6] hover:to-[#E73691] text-white border-0 font-semibold transition-all duration-200"
+                    >
+                      Apply Filter
+                    </Button>
+                  </div>
+                </div>
+                
+                {error && (
+                  <div className="mt-4 text-red-600 text-sm font-medium font-montserrat">{error}</div>
+                )}
+                
+                {startDate && endDate && (
+                  <div className="mt-4 text-sm text-purple-600 font-medium font-montserrat">
+                    Filtering data from {startDate} to {endDate}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* LifeCAR数据加载状态 */}
+            {lifeCarLoading && (
+              <div className="max-w-7xl mx-auto mb-6 flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                  <p className="text-purple-600 font-medium">Loading LifeCAR data...</p>
+                </div>
+              </div>
+            )}
+
+            {/* LifeCAR概览统计 */}
+            {!lifeCarLoading && filteredLifeCarData.length > 0 && (
+              <div className="max-w-7xl mx-auto">
+                <LifeCarOverviewStats data={filteredLifeCarData} />
+              </div>
+            )}
+
+            {/* LifeCAR模块导航 */}
+            <div className="max-w-7xl mx-auto mb-6">
+              <div className="bg-white/95 backdrop-blur-xl rounded-lg shadow-lg border border-gray-200/50 p-1">
+                <div className="flex">
+                  {modules.map((module, index) => (
+                    <button
+                      key={module.id}
+                      onClick={() => setActiveModule(module.id)}
+                      className={`flex-1 px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                        activeModule === module.id
+                          ? 'bg-gradient-to-r from-[#751FAE] to-[#EF3C99] text-white shadow-md'
+                          : 'bg-transparent hover:bg-gray-50 text-gray-700'
+                      } ${
+                        index === 0 ? 'rounded-l-lg' : index === modules.length - 1 ? 'rounded-r-lg' : ''
+                      }`}
+                    >
+                      {module.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* LifeCAR动态内容区域 */}
+            {!lifeCarLoading && filteredLifeCarData.length > 0 && (
+              <>
+                {activeModule === 'broker' && (
+                  <div className="max-w-7xl mx-auto mb-4 space-y-6">
+                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">🚗 LifeCAR Performance Overview</h2>
+                    
+                    <LifeCarDailyTrends data={filteredLifeCarData} title="Daily Marketing Performance" />
+                  </div>
+                )}
+
+                {activeModule === 'cost' && (
+                  <div className="max-w-7xl mx-auto mb-4 space-y-6">
+                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">💰 Cost & Performance Analysis</h2>
+                    
+                    <LifeCarMonthlySummary data={filteredLifeCarMonthlyData} title="Monthly Cost Analysis" />
+                  </div>
+                )}
+
+                {activeModule === 'activity-heatmap' && (
+                  <div className="max-w-7xl mx-auto mb-4">
+                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">🔥 Performance Heatmap</h2>
+                    <LifeCarPerformanceHeatmap data={filteredLifeCarData} title="Weekly Performance Pattern" />
+                  </div>
+                )}
+
+                {activeModule === 'time-analysis' && (
+                  <div className="max-w-7xl mx-auto mb-4">
+                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">⏰ Time-based Analysis</h2>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <LifeCarDailyTrends data={filteredLifeCarData} title="Daily Trends Analysis" />
+                      <LifeCarPerformanceHeatmap data={filteredLifeCarData} title="Day-of-Week Performance" />
+                    </div>
+                  </div>
+                )}
+
+                {activeModule === 'weekly-analysis' && (
+                  <div className="max-w-7xl mx-auto mb-4 space-y-6">
+                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">📈 Comprehensive Analysis</h2>
+                    
+                    <LifeCarMonthlySummary data={filteredLifeCarMonthlyData} />
+                    <LifeCarDailyTrends data={filteredLifeCarData} />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* 无数据状态 */}
+            {!lifeCarLoading && filteredLifeCarData.length === 0 && (
+              <div className="max-w-7xl mx-auto flex items-center justify-center py-12">
+                <div className="text-center bg-white/95 backdrop-blur-xl rounded-lg shadow-xl shadow-purple-500/10 ring-1 ring-purple-500/20 p-12">
+                  <div className="text-6xl mb-6">📊</div>
+                  <h3 className="text-xl font-semibold text-gray-700 mb-4">No Data Available</h3>
+                  <p className="text-gray-500">No data found for the selected date range. Please adjust your filters.</p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* 澳洲小王Broker咨询的数据面板 */}
+        {selectedAccount === 'xiaowang' && (
+          <>
+        
+        
         
         {/* 时间筛选器 - 独立卡片设计 */}
         <div className="max-w-7xl mx-auto mb-6">
@@ -785,14 +1046,13 @@ export default function Home() {
             {/* Overall Weekly Average - 独立模块 */}
             <WeeklyOverallAverage weeklyData={weeklyDataJson} brokerData={brokerDataJson} />
             
-            {/* Weekly Analysis Comments */}
-            <WeeklyAnalysisComments />
-            
             {/* Weekly Performance Details */}
             <WeeklyAnalysis weeklyData={weeklyDataJson} brokerData={brokerDataJson} />
           </div>
         )}
 
+          </>
+        )}
 
       </div>
       
