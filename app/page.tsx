@@ -25,6 +25,9 @@ import { LifeCarDailyTrends } from "@/components/lifecar-daily-trends"
 import { LifeCarMonthlySummary } from "@/components/lifecar-monthly-summary"
 import { LifeCarOverviewStats } from "@/components/lifecar-overview-stats"
 import { LifeCarPerformanceHeatmap } from "@/components/lifecar-performance-heatmap"
+import { EngagementDonutChart } from "@/components/engagement-donut-chart"
+import { ClickRateEngagementRateRollingChart } from "@/components/clickrate-engagementrate-rolling-chart"
+import { LifeCarWeeklyAnalysis } from "@/components/lifecar-weekly-analysis"
 import { parseLifeCarData, aggregateByMonth, filterByDateRange, type LifeCarDailyData, type LifeCarMonthlyData } from "@/lib/lifecar-data-processor"
 // 移除静态导入，改为动态API调用
 
@@ -205,6 +208,7 @@ export default function Home() {
   // 模块导航状态
   const [activeModule, setActiveModule] = useState('broker');
   const [showUpload, setShowUpload] = useState(false);
+  const [uploadAccountType, setUploadAccountType] = useState<'lifecar' | 'xiaowang'>('xiaowang');
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
@@ -438,9 +442,8 @@ export default function Home() {
       return [
         { id: 'broker', name: 'Campaign Overview', icon: '🚗', desc: 'Overall campaign performance' },
         { id: 'cost', name: 'Cost Analysis', icon: '💰', desc: 'Spend and efficiency metrics' },
-        { id: 'activity-heatmap', name: 'Performance Heatmap', icon: '🔥', desc: 'Time-based performance patterns' },
-        { id: 'time-analysis', name: 'Engagement Analysis', icon: '⏰', desc: 'Interaction and reach trends' },
-        { id: 'weekly-analysis', name: 'Comprehensive Report', icon: '📈', desc: 'Complete performance analysis' }
+        { id: 'activity-heatmap', name: 'Performance Analysis', icon: '🔥', desc: 'Time-based performance patterns' },
+        { id: 'weekly-analysis', name: 'Weekly Analysis', icon: '📈', desc: 'Weekly performance metrics' }
       ];
     } else {
       return [
@@ -543,12 +546,51 @@ export default function Home() {
       <nav className="bg-white/80 backdrop-blur-xl border-b border-purple-200/30 sticky top-0 z-[100] shadow-lg shadow-purple-500/10">
         <div className="w-full px-8">
           <div className="relative flex items-center h-24 py-4">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 z-50 relative">
               <img 
                 src="/LifeX_logo.png" 
                 alt="LifeX Logo" 
                 className="h-12 w-auto"
               />
+              
+              {/* 上传按钮组 - 放在logo右侧 */}
+              <div className="flex items-center space-x-2 border-l border-gray-300 pl-4">
+                {/* LifeCar澳洲Broker上传按钮 */}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('LifeCar button clicked');
+                    setUploadAccountType('lifecar');
+                    setShowUpload(true);
+                  }}
+                  className="flex items-center gap-1 px-3 py-2 text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200 cursor-pointer rounded-md border border-transparent hover:border-blue-200 z-50 relative"
+                  title="Upload LifeCar Australia Broker Data"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <span className="font-medium">LifeCar</span>
+                </button>
+                
+                {/* 澳洲Broker小王咨询上传按钮 */}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('XiaoWang button clicked');
+                    setUploadAccountType('xiaowang');
+                    setShowUpload(true);
+                  }}
+                  className="flex items-center gap-1 px-3 py-2 text-xs text-gray-600 hover:text-green-600 hover:bg-green-50 transition-all duration-200 cursor-pointer rounded-md border border-transparent hover:border-green-200 z-50 relative"
+                  title="Upload Australia Broker XiaoWang Consultation Data"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <span className="font-medium">小王咨询</span>
+                </button>
+              </div>
             </div>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <h1 className="text-4xl font-semibold bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">Marketing Dashboard</h1>
@@ -576,15 +618,6 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 <span className="hidden sm:inline">Refresh</span>
-              </button>
-              <button
-                onClick={() => setShowUpload(true)}
-                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-gradient-to-r from-[#751FAE] to-[#EF3C99] rounded hover:from-[#6919A6] hover:to-[#E73691] transition-all duration-200 shadow-md cursor-pointer z-50 relative"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <span className="hidden sm:inline">Upload</span>
               </button>
             </div>
           </div>
@@ -690,7 +723,7 @@ export default function Home() {
             {/* LifeCAR概览统计 */}
             {!lifeCarLoading && filteredLifeCarData.length > 0 && (
               <div className="max-w-7xl mx-auto">
-                <LifeCarOverviewStats data={filteredLifeCarData} />
+                <LifeCarOverviewStats data={filteredLifeCarData} allTimeData={lifeCarData} />
               </div>
             )}
 
@@ -732,35 +765,50 @@ export default function Home() {
                   <div className="max-w-7xl mx-auto mb-4 space-y-6">
                     <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">💰 Cost & Performance Analysis</h2>
                     
-                    <LifeCarMonthlySummary data={filteredLifeCarMonthlyData} title="Monthly Cost Analysis" />
+                    <LifeCarMonthlySummary 
+                      data={filteredLifeCarMonthlyData} 
+                      dailyData={filteredLifeCarData}
+                      unfilteredDailyData={lifeCarData}
+                      title="Monthly Cost Analysis" 
+                    />
                   </div>
                 )}
 
                 {activeModule === 'activity-heatmap' && (
-                  <div className="max-w-7xl mx-auto mb-4">
-                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">🔥 Performance Heatmap</h2>
+                  <div className="max-w-7xl mx-auto mb-4 space-y-6">
+                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">🔥 Performance Analysis</h2>
+                    
+                    {/* 新增：点击率vs互动率的7天滚动平均图表 - 使用未筛选的原始数据 */}
+                    {lifeCarData && lifeCarData.length > 0 && (
+                      <ClickRateEngagementRateRollingChart 
+                        data={lifeCarData} 
+                        title="7-Day Rolling Average: Click Rate vs Engagement Rate"
+                      />
+                    )}
+                    
                     <LifeCarPerformanceHeatmap data={filteredLifeCarData} title="Weekly Performance Pattern" />
-                  </div>
-                )}
-
-                {activeModule === 'time-analysis' && (
-                  <div className="max-w-7xl mx-auto mb-4">
-                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">⏰ Time-based Analysis</h2>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      <LifeCarDailyTrends data={filteredLifeCarData} title="Daily Trends Analysis" />
-                      <LifeCarPerformanceHeatmap data={filteredLifeCarData} title="Day-of-Week Performance" />
-                    </div>
+                    
+                    {/* 新增：双环甜甜圈图表 - 互动类型占比比较 */}
+                    {lifeCarData && lifeCarData.length > 0 && (
+                      <EngagementDonutChart 
+                        filteredData={filteredLifeCarData}
+                        allTimeData={lifeCarData}
+                        title="Engagement Breakdown: Filtered vs All Time"
+                      />
+                    )}
                   </div>
                 )}
 
                 {activeModule === 'weekly-analysis' && (
-                  <div className="max-w-7xl mx-auto mb-4 space-y-6">
-                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">📈 Comprehensive Analysis</h2>
-                    
-                    <LifeCarMonthlySummary data={filteredLifeCarMonthlyData} />
-                    <LifeCarDailyTrends data={filteredLifeCarData} />
+                  <div className="max-w-7xl mx-auto mb-4">
+                    <h2 className="text-xl font-semibold mb-3 bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">📈 Weekly Analysis</h2>
+                    <LifeCarWeeklyAnalysis 
+                      data={lifeCarData} 
+                      title="Weekly Performance Metrics"
+                    />
                   </div>
                 )}
+
               </>
             )}
 
@@ -865,7 +913,7 @@ export default function Home() {
         
         {/* Upload Modal */}
         {showUpload && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999]">
             <div className="bg-white/90 backdrop-blur-xl rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl shadow-purple-500/20 border border-purple-200/50">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">Upload Excel Data</h2>
@@ -878,7 +926,20 @@ export default function Home() {
                   ✕
                 </Button>
               </div>
-              <ExcelUpload onUploadSuccess={handleUploadSuccess} />
+              <ExcelUpload 
+                onUploadSuccess={(data) => {
+                  // 根据上传类型切换账号
+                  if (uploadAccountType === 'lifecar') {
+                    setSelectedAccount('lifecar');
+                    // 如果是CSV文件，重新加载LifeCAR数据
+                    loadLifeCarData();
+                  } else {
+                    setSelectedAccount('xiaowang');
+                  }
+                  handleUploadSuccess(data);
+                }} 
+                accountType={uploadAccountType}
+              />
             </div>
           </div>
         )}

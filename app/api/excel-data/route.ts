@@ -335,6 +335,39 @@ export async function GET() {
   }
 }
 
+// Helper function to process CSV buffer for LifeCAR data
+async function processCSVBuffer(buffer: Buffer): Promise<any> {
+  const text = buffer.toString('utf-8');
+  const lines = text.split('\n').filter(line => line.trim());
+  
+  if (lines.length === 0) {
+    throw new Error('CSV file is empty');
+  }
+  
+  // Parse CSV header
+  const headers = lines[0].split(',').map(h => h.trim());
+  
+  // Parse CSV data
+  const data = [];
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',').map(v => v.trim());
+    const row: any = {};
+    headers.forEach((header, index) => {
+      row[header] = values[index];
+    });
+    data.push(row);
+  }
+  
+  // Return formatted data for LifeCAR
+  return {
+    broker_data: [],
+    weekly_data: [],
+    monthly_data: [],
+    daily_cost_data: data,
+    lifecar_data: data
+  };
+}
+
 export async function POST(request: Request) {
   try {
     console.log('POST /api/excel-data called - Start');
@@ -345,6 +378,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     console.log('FormData received, processing...');
     const file = formData.get("file") as File;
+    const accountType = formData.get("accountType") as string;
 
     console.log('File received:', file ? file.name : 'No file', 'Size:', file?.size);
 
@@ -354,25 +388,34 @@ export async function POST(request: Request) {
     }
 
     // Check file type
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xlsm')) {
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xlsm') && !file.name.endsWith('.csv')) {
       console.log('Invalid file type:', file.name);
       return NextResponse.json({ 
-        error: "Invalid file type. Please upload an Excel file (.xlsx or .xlsm)" 
+        error: "Invalid file type. Please upload an Excel (.xlsx, .xlsm) or CSV file" 
       }, { status: 400 });
     }
 
-    console.log('Processing file:', file.name, 'Size:', file.size);
+    console.log('Processing file:', file.name, 'Size:', file.size, 'Account Type:', accountType);
 
     // Process uploaded file buffer directly (no file system write needed)
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
-    console.log('Processing Excel buffer directly, size:', buffer.length);
+    console.log('Processing buffer directly, size:', buffer.length);
     
-    // Process the uploaded Excel file from buffer
-    console.log('Starting Excel processing...');
-    const results = await processExcelBuffer(buffer);
-    console.log('Excel processing completed, results:', Object.keys(results));
+    let results;
+    
+    // Check if it's a CSV file
+    if (file.name.endsWith('.csv')) {
+      console.log('Starting CSV processing for LifeCAR data...');
+      results = await processCSVBuffer(buffer);
+      console.log('CSV processing completed');
+    } else {
+      // Process Excel file
+      console.log('Starting Excel processing...');
+      results = await processExcelBuffer(buffer);
+      console.log('Excel processing completed, results:', Object.keys(results));
+    }
 
     return NextResponse.json({ 
       message: "File uploaded and processed successfully",

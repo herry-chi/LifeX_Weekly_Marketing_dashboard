@@ -73,11 +73,11 @@ export function LifeCarPerformanceHeatmap({ data, title = "Performance Heatmap" 
                   <div
                     key={day}
                     className={`p-3 rounded-lg text-center transition-all duration-200 hover:scale-105 cursor-pointer ${getHeatmapColor(intensity)}`}
-                    title={`${day}: $${avgSpend.toFixed(2)} avg spend`}
+                    title={`${day}: ¥${avgSpend.toFixed(2)} avg spend`}
                   >
                     <div className="text-xs font-medium text-gray-800 mb-1">{day.slice(0, 3)}</div>
                     <div className="text-sm font-bold text-gray-900">
-                      ${dayData ? dayData.totalSpend.toFixed(0) : '0'}
+                      ¥{dayData ? dayData.totalSpend.toFixed(0) : '0'}
                     </div>
                   </div>
                 )
