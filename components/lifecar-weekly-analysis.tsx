@@ -253,7 +253,7 @@ export function LifeCarWeeklyAnalysis({ data, title = "Weekly Performance Detail
               </div>
             </div>
           </div>
-        ))}
+        ))}CL
       </div>
     </div>
   )

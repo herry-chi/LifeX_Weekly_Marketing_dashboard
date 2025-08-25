@@ -89,7 +89,7 @@ export function LifeCarMonthlySummary({ data, dailyData = [], unfilteredDailyDat
         <Card className="bg-white/95 backdrop-blur-xl shadow-lg border border-gray-200/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">
-              💰 Monthly Spend & Interactions
+              💰 Monthly Spend & Engagement
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -120,7 +120,7 @@ export function LifeCarMonthlySummary({ data, dailyData = [], unfilteredDailyDat
                     yAxisId="right"
                     orientation="right"
                     tick={{ fontSize: 12, fill: '#751FAE' }}
-                    label={{ value: 'Interactions', angle: 90, position: 'insideRight', style: { fill: '#751FAE' } }}
+                    label={{ value: 'Engagement', angle: 90, position: 'insideRight', style: { fill: '#751FAE' } }}
                   />
                   <Tooltip
                     contentStyle={{
@@ -133,7 +133,7 @@ export function LifeCarMonthlySummary({ data, dailyData = [], unfilteredDailyDat
                       if (name === 'spend') {
                         return [`¥${value.toFixed(2)}`, 'Total Spend']
                       }
-                      return [value.toLocaleString(), 'Interactions']
+                      return [value.toLocaleString(), 'Engagement']
                     }}
                   />
                   <Legend />
@@ -159,7 +159,7 @@ export function LifeCarMonthlySummary({ data, dailyData = [], unfilteredDailyDat
                     stroke="#751FAE"
                     strokeWidth={2}
                     fill="url(#colorInteractions)"
-                    name="Interactions"
+                    name="Engagement"
                     dot={{ fill: '#751FAE', r: 4 }}
                     activeDot={{ r: 6 }}
                   >
