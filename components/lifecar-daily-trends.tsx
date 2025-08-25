@@ -30,7 +30,7 @@ export function LifeCarDailyTrends({ data, title = "Daily Performance Trends" }:
 
   // 数据系列配置
   const seriesConfig = [
-    { key: 'spend', label: 'Spend ($)', color: '#EF3C99', icon: '💰' },
+    { key: 'spend', label: 'Spend (¥)', color: '#EF3C99', icon: '💰' },
     { key: 'interactions', label: 'Interactions', color: '#751FAE', icon: '❤️' },
     { key: 'impressions', label: 'Impressions (÷100)', color: '#10B981', icon: '👁️' },
     { key: 'followers', label: 'Followers', color: '#F59E0B', icon: '👥' }
@@ -92,7 +92,7 @@ export function LifeCarDailyTrends({ data, title = "Daily Performance Trends" }:
                     return [(value * 100).toLocaleString(), 'Impressions']
                   }
                   if (name === 'spend') {
-                    return [`$${value.toFixed(2)}`, 'Spend']
+                    return [`¥${value.toFixed(2)}`, 'Spend']
                   }
                   return [value.toLocaleString(), name]
                 }}
@@ -104,8 +104,8 @@ export function LifeCarDailyTrends({ data, title = "Daily Performance Trends" }:
                   dataKey="spend" 
                   stroke="#EF3C99" 
                   strokeWidth={2}
-                  name="Spend ($)"
-                  dot={{ fill: '#EF3C99', r: 3 }}
+                  name="Spend (¥)"
+                  dot={false}
                 />
               )}
               {visibleSeries.interactions && (
@@ -115,7 +115,7 @@ export function LifeCarDailyTrends({ data, title = "Daily Performance Trends" }:
                   stroke="#751FAE" 
                   strokeWidth={2}
                   name="Interactions"
-                  dot={{ fill: '#751FAE', r: 3 }}
+                  dot={false}
                 />
               )}
               {visibleSeries.impressions && (
@@ -125,7 +125,7 @@ export function LifeCarDailyTrends({ data, title = "Daily Performance Trends" }:
                   stroke="#10B981" 
                   strokeWidth={2}
                   name="Impressions (÷100)"
-                  dot={{ fill: '#10B981', r: 3 }}
+                  dot={false}
                 />
               )}
               {visibleSeries.followers && (
@@ -135,7 +135,7 @@ export function LifeCarDailyTrends({ data, title = "Daily Performance Trends" }:
                   stroke="#F59E0B" 
                   strokeWidth={2}
                   name="Followers"
-                  dot={{ fill: '#F59E0B', r: 3 }}
+                  dot={false}
                 />
               )}
             </LineChart>

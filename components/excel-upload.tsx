@@ -8,9 +8,10 @@ import { Upload, FileSpreadsheet, Check, AlertCircle, Loader2 } from 'lucide-rea
 
 interface ExcelUploadProps {
   onUploadSuccess?: (data?: any) => void
+  accountType?: 'lifecar' | 'xiaowang'
 }
 
-export function ExcelUpload({ onUploadSuccess }: ExcelUploadProps) {
+export function ExcelUpload({ onUploadSuccess, accountType = 'xiaowang' }: ExcelUploadProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
@@ -40,6 +41,7 @@ export function ExcelUpload({ onUploadSuccess }: ExcelUploadProps) {
     try {
       const formData = new FormData()
       formData.append('file', selectedFile)
+      formData.append('accountType', accountType)
 
       console.log('Uploading file:', selectedFile.name, 'Size:', selectedFile.size)
 
@@ -101,12 +103,12 @@ export function ExcelUpload({ onUploadSuccess }: ExcelUploadProps) {
     const files = event.dataTransfer.files
     if (files.length > 0) {
       const file = files[0]
-      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xlsm')) {
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xlsm') || file.name.endsWith('.csv')) {
         setSelectedFile(file)
         setUploadStatus('idle')
         setMessage('')
       } else {
-        setMessage('Please select an Excel file (.xlsx or .xlsm)')
+        setMessage('Please select an Excel or CSV file (.xlsx, .xlsm, or .csv)')
         setUploadStatus('error')
       }
     }
@@ -117,7 +119,7 @@ export function ExcelUpload({ onUploadSuccess }: ExcelUploadProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileSpreadsheet className="h-5 w-5" />
-          Upload Excel Data
+          Upload {accountType === 'lifecar' ? 'LifeCar' : 'XiaoWang'} Data
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -133,12 +135,12 @@ export function ExcelUpload({ onUploadSuccess }: ExcelUploadProps) {
         >
           <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
           <p className="text-sm text-gray-600 mb-2 font-montserrat font-light">
-            {selectedFile ? selectedFile.name : 'Drag & drop your Excel file here or click to browse'}
+            {selectedFile ? selectedFile.name : 'Drag & drop your Excel/CSV file here or click to browse'}
           </p>
           <Input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xlsm"
+            accept=".xlsx,.xlsm,.csv"
             onChange={handleFileSelect}
             className="hidden"
             id="file-upload"
@@ -190,13 +192,31 @@ export function ExcelUpload({ onUploadSuccess }: ExcelUploadProps) {
 
         {/* Instructions */}
         <div className="text-xs text-gray-500 space-y-1 font-montserrat font-light">
-          <p><strong>Expected Excel structure:</strong></p>
+          <p><strong>Supported file formats:</strong></p>
           <ul className="list-disc list-inside space-y-1 ml-2">
-            <li>Sheet: "Clients_info(new)" - Main client data</li>
-            <li>Sheet: "Weekly_data" - Weekly metrics</li>
-            <li>Sheet: "Monthly_data" - Monthly metrics</li>
-            <li>Sheet: "Daily_cost" - Daily cost data</li>
+            <li>Excel files (.xlsx, .xlsm)</li>
+            <li>CSV files (.csv)</li>
           </ul>
+          {accountType === 'xiaowang' && (
+            <>
+              <p className="mt-2"><strong>Expected Excel structure:</strong></p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Sheet: "Clients_info(new)" - Main client data</li>
+                <li>Sheet: "Weekly_data" - Weekly metrics</li>
+                <li>Sheet: "Monthly_data" - Monthly metrics</li>
+                <li>Sheet: "Daily_cost" - Daily cost data</li>
+              </ul>
+            </>
+          )}
+          {accountType === 'lifecar' && (
+            <>
+              <p className="mt-2"><strong>Expected CSV structure:</strong></p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Daily marketing performance data</li>
+                <li>Columns: Date, Spend, Impressions, Clicks, etc.</li>
+              </ul>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

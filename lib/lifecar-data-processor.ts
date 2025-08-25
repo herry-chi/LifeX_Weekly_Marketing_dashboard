@@ -2,10 +2,30 @@
 export interface LifeCarDailyData {
   date: string
   spend: number
-  followers: number
-  interactions: number
   impressions: number
-  privateMessages: number
+  clicks: number
+  clickRate: number
+  avgClickCost: number
+  cpm: number
+  likes: number
+  comments: number
+  saves: number
+  followers: number
+  shares: number
+  interactions: number
+  avgInteractionCost: number
+  actionButtonClicks: number
+  actionButtonClickRate: number
+  screenshots: number
+  imageSaves: number
+  searchClicks: number
+  searchConversionRate: number
+  avgReadNotesAfterSearch: number
+  readCountAfterSearch: number
+  multiConversion1: number // 多转化人数（添加企微+私信咨询）
+  multiConversionCost1: number
+  multiConversion2: number // 多转化人数（添加企微成功+私信留资）
+  multiConversionCost2: number
 }
 
 export interface LifeCarMonthlyData {
@@ -36,29 +56,49 @@ export function parseLifeCarData(csvText: string): LifeCarDailyData[] {
   const lines = csvText.trim().split('\n')
   const data: LifeCarDailyData[] = []
   
-  // 跳过标题行和合计行
-  for (let i = 2; i < lines.length; i++) {
+  // 跳过标题行，从第二行开始
+  for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim()
     if (!line) continue
     
     const columns = line.split(',')
-    if (columns.length >= 6) {
+    if (columns.length >= 26) {
       const dateStr = columns[0]
-      const spend = parseFloat(columns[1]) || 0
-      const followers = parseInt(columns[2]) || 0
-      const interactions = parseInt(columns[3]) || 0
-      const impressions = parseInt(columns[4]) || 0
-      const privateMessages = parseInt(columns[5]) || 0
       
-      // 验证日期格式
-      if (dateStr && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // 解析和转换日期格式：从 DD/MM/YYYY 转换为 YYYY-MM-DD
+      if (dateStr && dateStr.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+        const [day, month, year] = dateStr.split('/')
+        const paddedDay = day.padStart(2, '0')
+        const paddedMonth = month.padStart(2, '0')
+        const formattedDate = `${year}-${paddedMonth}-${paddedDay}`
+        
         data.push({
-          date: dateStr,
-          spend,
-          followers,
-          interactions,
-          impressions,
-          privateMessages
+          date: formattedDate,
+          spend: parseFloat(columns[1]) || 0,
+          impressions: parseInt(columns[2]) || 0,
+          clicks: parseInt(columns[3]) || 0,
+          clickRate: parseFloat(columns[4]?.replace('%', '')) || 0,
+          avgClickCost: parseFloat(columns[5]) || 0,
+          cpm: parseFloat(columns[6]) || 0,
+          likes: parseInt(columns[7]) || 0,
+          comments: parseInt(columns[8]) || 0,
+          saves: parseInt(columns[9]) || 0,
+          followers: parseInt(columns[10]) || 0,
+          shares: parseInt(columns[11]) || 0,
+          interactions: parseInt(columns[12]) || 0,
+          avgInteractionCost: parseFloat(columns[13]) || 0,
+          actionButtonClicks: parseInt(columns[14]) || 0,
+          actionButtonClickRate: parseFloat(columns[15]?.replace('%', '')) || 0,
+          screenshots: parseInt(columns[16]) || 0,
+          imageSaves: parseInt(columns[17]) || 0,
+          searchClicks: parseInt(columns[18]) || 0,
+          searchConversionRate: parseFloat(columns[19]?.replace('%', '')) || 0,
+          avgReadNotesAfterSearch: parseFloat(columns[20]) || 0,
+          readCountAfterSearch: parseInt(columns[21]) || 0,
+          multiConversion1: parseInt(columns[22]) || 0,
+          multiConversionCost1: parseFloat(columns[23]) || 0,
+          multiConversion2: parseInt(columns[24]) || 0,
+          multiConversionCost2: parseFloat(columns[25]) || 0
         })
       }
     }

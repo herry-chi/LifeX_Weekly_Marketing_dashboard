@@ -22,7 +22,8 @@
       "Bash(npx next dev:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(copy:*)"
     ],
     "deny": []
   }
