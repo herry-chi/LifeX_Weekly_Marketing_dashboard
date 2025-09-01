@@ -226,5 +226,23 @@
     "totalCost": 759.8489361702127,
     "leadsTotal": 27,
     "leadsPrice": 28.142553191489363
+  },
+  {
+    "week": "2025/wk32",
+    "totalCost": 698.4127659574468,
+    "leadsTotal": 23,
+    "leadsPrice": 30.36577243293247
+  },
+  {
+    "week": "2025/wk33",
+    "totalCost": 414.4957446808511,
+    "leadsTotal": 21,
+    "leadsPrice": 19.73789260385005
+  },
+  {
+    "week": "2025/wk34",
+    "totalCost": 586.1063829787233,
+    "leadsTotal": 7,
+    "leadsPrice": 83.72948328267476
   }
 ]

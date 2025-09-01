@@ -16,12 +16,12 @@ interface WeeklyMetrics {
   totalCost: number
   totalImpressions: number
   totalClicks: number
-  totalEngagement: number
+  totalInteraction: number
   totalPrivateMessages: number
   costChange?: number
   impressionsChange?: number
   clicksChange?: number
-  engagementChange?: number
+  interactionChange?: number
   privateMessagesChange?: number
 }
 
@@ -64,7 +64,7 @@ export function LifeCarWeeklyAnalysis({ data, title = "Weekly Performance Detail
         totalCost: weekData.reduce((sum, d) => sum + (d.spend || 0), 0),
         totalImpressions: weekData.reduce((sum, d) => sum + (d.impressions || 0), 0),
         totalClicks: weekData.reduce((sum, d) => sum + (d.clicks || 0), 0),
-        totalEngagement: weekData.reduce((sum, d) => sum + (d.interactions || 0), 0),
+        totalInteraction: weekData.reduce((sum, d) => sum + (d.interactions || 0), 0),
         totalPrivateMessages: weekData.reduce((sum, d) => sum + ((d.multiConversion1 || 0) + (d.multiConversion2 || 0)), 0)
 
       }
@@ -93,8 +93,8 @@ export function LifeCarWeeklyAnalysis({ data, title = "Weekly Performance Detail
       if (previous.totalClicks > 0) {
         current.clicksChange = ((current.totalClicks - previous.totalClicks) / previous.totalClicks) * 100
       }
-      if (previous.totalEngagement > 0) {
-        current.engagementChange = ((current.totalEngagement - previous.totalEngagement) / previous.totalEngagement) * 100
+      if (previous.totalInteraction > 0) {
+        current.interactionChange = ((current.totalInteraction - previous.totalInteraction) / previous.totalInteraction) * 100
       }
       if (previous.totalPrivateMessages > 0) {
         current.privateMessagesChange = ((current.totalPrivateMessages - previous.totalPrivateMessages) / previous.totalPrivateMessages) * 100
@@ -198,45 +198,32 @@ export function LifeCarWeeklyAnalysis({ data, title = "Weekly Performance Detail
                 </svg>
                 <div className="text-xs font-semibold text-[#751FAE] font-montserrat mb-2">Total Cost</div>
                 <div className="flex items-center gap-2">
-                  <div className="text-2xl font-semibold text-[#FF1493] font-montserrat">¥{formatNumber(weekData.totalCost)}</div>
+                  <div className="text-2xl font-semibold text-[#FF1493] font-montserrat">${formatNumber(weekData.totalCost)}</div>
                   {renderChangePercent(weekData.costChange, 'negative')}
                 </div>
               </div>
 
-              {/* Impressions */}
-              <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-md border border-gray-200/60 p-3 hover:shadow-lg transition-all duration-200 relative">
-                <svg className="absolute top-2 right-2 w-4 h-4 text-[#751FAE]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                <div className="text-xs font-semibold text-[#751FAE] font-montserrat mb-2">Impressions</div>
-                <div className="flex items-center gap-2">
-                  <div className="text-2xl font-semibold text-[#FF1493] font-montserrat">{formatNumber(weekData.totalImpressions)}</div>
-                  {renderChangePercent(weekData.impressionsChange, 'positive')}
-                </div>
-              </div>
-
-              {/* Clicks */}
+              {/* Views (previously Clicks) */}
               <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-md border border-gray-200/60 p-3 hover:shadow-lg transition-all duration-200 relative">
                 <svg className="absolute top-2 right-2 w-4 h-4 text-[#751FAE]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                 </svg>
-                <div className="text-xs font-semibold text-[#751FAE] font-montserrat mb-2">Clicks</div>
+                <div className="text-xs font-semibold text-[#751FAE] font-montserrat mb-2">Views</div>
                 <div className="flex items-center gap-2">
                   <div className="text-2xl font-semibold text-[#FF1493] font-montserrat">{formatNumber(weekData.totalClicks)}</div>
                   {renderChangePercent(weekData.clicksChange, 'positive')}
                 </div>
               </div>
 
-              {/* Engagement */}
+              {/* Interaction */}
               <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-md border border-gray-200/60 p-3 hover:shadow-lg transition-all duration-200 relative">
                 <svg className="absolute top-2 right-2 w-4 h-4 text-[#751FAE]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                 </svg>
-                <div className="text-xs font-semibold text-[#751FAE] font-montserrat mb-2">Engagement</div>
+                <div className="text-xs font-semibold text-[#751FAE] font-montserrat mb-2">Interaction</div>
                 <div className="flex items-center gap-2">
-                  <div className="text-2xl font-semibold text-[#FF1493] font-montserrat">{formatNumber(weekData.totalEngagement)}</div>
-                  {renderChangePercent(weekData.engagementChange, 'positive')}
+                  <div className="text-2xl font-semibold text-[#FF1493] font-montserrat">{formatNumber(weekData.totalInteraction)}</div>
+                  {renderChangePercent(weekData.interactionChange, 'positive')}
                 </div>
               </div>
 

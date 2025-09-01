@@ -1,9 +1,12 @@
 "use client"
 
 import React, { useMemo } from 'react';
-import brokerDataJson from "@/public/broker_data.json";
 
-function processActivityHeatmapData() {
+interface BrokerActivityHeatmapProps {
+  brokerData?: any[];
+}
+
+function processActivityHeatmapData(brokerDataJson: any[] = []) {
   try {
     const clientsData = brokerDataJson || [];
     
@@ -78,10 +81,11 @@ function processActivityHeatmapData() {
 interface BrokerActivityHeatmapProps {
   startDate?: string;
   endDate?: string;
+  brokerData?: any[];
 }
 
-export function BrokerActivityHeatmap({ startDate, endDate }: BrokerActivityHeatmapProps) {
-  const { months, brokers, matrix, maxValue, averageValue } = useMemo(() => processActivityHeatmapData(), []);
+export function BrokerActivityHeatmap({ startDate, endDate, brokerData = [] }: BrokerActivityHeatmapProps) {
+  const { months, brokers, matrix, maxValue, averageValue } = useMemo(() => processActivityHeatmapData(brokerData), [brokerData]);
 
   const getIntensityColor = (value: number) => {
     if (!value) return '#f8fafc'; // 最浅灰色

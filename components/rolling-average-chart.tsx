@@ -79,7 +79,7 @@ export function RollingAverageChart() {
             <YAxis 
               yAxisId="left"
               className="text-xs"
-              label={{ value: '7天平均消费 (¥)', angle: -90, position: 'insideLeft' }}
+              label={{ value: '7天平均消费 ($)', angle: -90, position: 'insideLeft' }}
               domain={['dataMin * 0.9', 'dataMax * 1.1']}
               scale="linear"
             />
@@ -93,7 +93,7 @@ export function RollingAverageChart() {
             />
             <Tooltip 
               formatter={(value: number, name: string) => {
-                if (name === '平均消费') return `¥${value.toFixed(2)}`
+                if (name === '平均消费') return `$${value.toFixed(2)}`
                 return value.toFixed(2)
               }}
             />

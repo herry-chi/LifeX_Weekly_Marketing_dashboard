@@ -1,8 +1,9 @@
 "use client"
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { LifeCarDailyData } from "@/lib/lifecar-data-processor"
 
 interface DualAxisRollingAverageChartProps {
@@ -14,9 +15,15 @@ interface RollingAverageData {
   date: string
   spendAvg: number
   clicksAvg: number
+  likesAvg: number
+  followersAvg: number
   originalSpend: number
   originalClicks: number
+  originalLikes: number
+  originalFollowers: number
 }
+
+type MetricType = 'clicks' | 'likes' | 'followers'
 
 // Calculate 7-day rolling average (7 days before, 0 days after)
 function calculateRollingAverage(data: LifeCarDailyData[]): RollingAverageData[] {
@@ -33,13 +40,19 @@ function calculateRollingAverage(data: LifeCarDailyData[]): RollingAverageData[]
     // Calculate average for this window
     const spendSum = windowData.reduce((sum, item) => sum + item.spend, 0)
     const clicksSum = windowData.reduce((sum, item) => sum + item.clicks, 0)
+    const likesSum = windowData.reduce((sum, item) => sum + item.likes, 0)
+    const followersSum = windowData.reduce((sum, item) => sum + item.followers, 0)
     
     result.push({
       date: sortedData[i].date,
       spendAvg: spendSum / windowData.length,
       clicksAvg: clicksSum / windowData.length,
+      likesAvg: likesSum / windowData.length,
+      followersAvg: followersSum / windowData.length,
       originalSpend: sortedData[i].spend,
-      originalClicks: sortedData[i].clicks
+      originalClicks: sortedData[i].clicks,
+      originalLikes: sortedData[i].likes,
+      originalFollowers: sortedData[i].followers
     })
   }
   
@@ -90,18 +103,54 @@ function calculateNiceScale(minValue: number, maxValue: number, targetTicks: num
   }
 }
 
-export function DualAxisRollingAverageChart({ data, title = "Cost & Clicks Rolling Average Analysis" }: DualAxisRollingAverageChartProps) {
+export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Average Analysis: Cost & Metrics" }: DualAxisRollingAverageChartProps) {
+  // State for metric selection
+  const [selectedMetric, setSelectedMetric] = useState<MetricType>('clicks')
+  
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return []
     return calculateRollingAverage(data)
   }, [data])
+  
+  // Get current metric data and config
+  const metricConfig = useMemo(() => {
+    switch (selectedMetric) {
+      case 'likes':
+        return {
+          dataKey: 'likesAvg',
+          name: '7-day Likes Rolling Avg',
+          color: '#EF3C99',
+          label: 'Likes',
+          icon: '👍',
+          yAxisLabel: 'Likes'
+        }
+      case 'followers':
+        return {
+          dataKey: 'followersAvg',
+          name: '7-day Followers Rolling Avg',
+          color: '#10B981',
+          label: 'New Followers',
+          icon: '👥',
+          yAxisLabel: 'New Followers'
+        }
+      default: // clicks
+        return {
+          dataKey: 'clicksAvg',
+          name: '7-day Views Rolling Avg',
+          color: '#3CBDE5',
+          label: 'Views',
+          icon: '👁️',
+          yAxisLabel: 'Views'
+        }
+    }
+  }, [selectedMetric])
 
   // Calculate dynamic scales for both axes
-  const { spendScale, clicksScale } = useMemo(() => {
+  const { spendScale, metricScale } = useMemo(() => {
     if (!chartData || chartData.length === 0) {
       return {
         spendScale: { domain: [0, 100], ticks: [0, 25, 50, 75, 100] },
-        clicksScale: { domain: [0, 100], ticks: [0, 25, 50, 75, 100] }
+        metricScale: { domain: [0, 100], ticks: [0, 25, 50, 75, 100] }
       }
     }
     
@@ -110,23 +159,23 @@ export function DualAxisRollingAverageChart({ data, title = "Cost & Clicks Rolli
     const minSpend = spendValues.length > 0 ? Math.min(...spendValues) : 0
     const maxSpend = spendValues.length > 0 ? Math.max(...spendValues) : 100
     
-    // Find min and max for clicks with better dynamic range
-    const clicksValues = chartData.map(d => d.clicksAvg).filter(v => v > 0)
-    const minClicks = clicksValues.length > 0 ? Math.min(...clicksValues) : 0
-    const maxClicks = clicksValues.length > 0 ? Math.max(...clicksValues) : 100
+    // Find min and max for selected metric with better dynamic range
+    const metricValues = chartData.map(d => d[metricConfig.dataKey]).filter(v => v > 0)
+    const minMetric = metricValues.length > 0 ? Math.min(...metricValues) : 0
+    const maxMetric = metricValues.length > 0 ? Math.max(...metricValues) : 100
     
     // Use adaptive tick count based on data range
     const spendRange = maxSpend - minSpend
-    const clicksRange = maxClicks - minClicks
+    const metricRange = maxMetric - minMetric
     
     const spendTickCount = spendRange > 1000 ? 6 : spendRange > 100 ? 5 : 4
-    const clicksTickCount = clicksRange > 1000 ? 6 : clicksRange > 100 ? 5 : 4
+    const metricTickCount = metricRange > 1000 ? 6 : metricRange > 100 ? 5 : 4
     
     return {
       spendScale: calculateNiceScale(minSpend, maxSpend, spendTickCount),
-      clicksScale: calculateNiceScale(minClicks, maxClicks, clicksTickCount)
+      metricScale: calculateNiceScale(minMetric, maxMetric, metricTickCount)
     }
-  }, [chartData])
+  }, [chartData, metricConfig.dataKey])
 
   // Format date display
   const formatDate = (dateStr: string) => {
@@ -148,34 +197,25 @@ export function DualAxisRollingAverageChart({ data, title = "Cost & Clicks Rolli
         day: 'numeric' 
       })
       
-      // Calculate day-over-day changes if previous data exists
-      const currentIndex = chartData.findIndex(d => d.date === label)
-      const prevData = currentIndex > 0 ? chartData[currentIndex - 1] : null
-      
-      const spendChange = prevData 
-        ? ((dataPoint.spendAvg - prevData.spendAvg) / prevData.spendAvg * 100)
-        : null
-      const clicksChange = prevData
-        ? ((dataPoint.clicksAvg - prevData.clicksAvg) / prevData.clicksAvg * 100)
-        : null
-      
       return (
         <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-4 shadow-xl min-w-[220px]">
           <p className="font-bold text-gray-900 mb-3 border-b pb-2">{formattedDate}</p>
           
-          {/* Spend Section */}
+          {/* Cost Section */}
           <div className="mb-3">
-            <p className="text-sm font-semibold text-pink-600 mb-1">💰 Spend</p>
+            <p className="text-sm font-semibold text-pink-600 mb-1">💰 Cost</p>
             <p className="text-sm text-gray-700">
-              <span className="font-medium">7-day Avg:</span> ¥{dataPoint.spendAvg.toFixed(2)}
+              <span className="font-medium">7-day Avg:</span> ${dataPoint.spendAvg.toFixed(2)}
             </p>
           </div>
           
-          {/* Clicks Section */}
+          {/* Selected Metric Section */}
           <div>
-            <p className="text-sm font-semibold text-purple-600 mb-1">👆 Clicks</p>
+            <p className="text-sm font-semibold mb-1" style={{ color: metricConfig.color }}>
+              {metricConfig.icon} {metricConfig.label}
+            </p>
             <p className="text-sm text-gray-700">
-              <span className="font-medium">7-day Avg:</span> {dataPoint.clicksAvg.toFixed(1)}
+              <span className="font-medium">7-day Avg:</span> {dataPoint[metricConfig.dataKey].toFixed(1)}
             </p>
           </div>
         </div>
@@ -204,12 +244,53 @@ export function DualAxisRollingAverageChart({ data, title = "Cost & Clicks Rolli
   return (
     <Card className="bg-white/95 backdrop-blur-xl shadow-lg border border-gray-200/50">
       <CardHeader>
-        <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">
-          📈 {title}
-        </CardTitle>
-        <p className="text-sm text-gray-600 font-montserrat font-light">
-          7-day rolling average comparison analysis. X-axis: Time, Left Y-axis: Spend rolling avg, Right Y-axis: Clicks rolling avg
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">
+              📈 7-Day Rolling Average Analysis: Cost & {metricConfig.label}
+            </CardTitle>
+            <p className="text-sm text-gray-600 font-montserrat font-light mt-1">
+              7-day rolling average comparison analysis. Left Y-axis: Cost, Right Y-axis: {metricConfig.label}
+            </p>
+          </div>
+          
+          {/* Metric Selection Buttons */}
+          <div className="flex gap-2">
+            <Button
+              variant={selectedMetric === 'clicks' ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedMetric('clicks')}
+              className={selectedMetric === 'clicks' 
+                ? 'bg-[#3CBDE5] hover:bg-[#2563EB] text-white border-0' 
+                : 'border-[#3CBDE5] text-[#3CBDE5] hover:bg-[#3CBDE5] hover:text-white'
+              }
+            >
+              Views
+            </Button>
+            <Button
+              variant={selectedMetric === 'likes' ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedMetric('likes')}
+              className={selectedMetric === 'likes' 
+                ? 'bg-[#EF3C99] hover:bg-[#E91E63] text-white border-0' 
+                : 'border-[#EF3C99] text-[#EF3C99] hover:bg-[#EF3C99] hover:text-white'
+              }
+            >
+              Likes
+            </Button>
+            <Button
+              variant={selectedMetric === 'followers' ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedMetric('followers')}
+              className={selectedMetric === 'followers' 
+                ? 'bg-[#10B981] hover:bg-[#059669] text-white border-0' 
+                : 'border-[#10B981] text-[#10B981] hover:bg-[#10B981] hover:text-white'
+              }
+            >
+              Followers
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="h-96">
@@ -235,52 +316,52 @@ export function DualAxisRollingAverageChart({ data, title = "Cost & Clicks Rolli
                 ticks={spendScale.ticks}
                 tick={{ fontSize: 12, fill: '#6B7280' }}
                 tickFormatter={(value) => {
-                  if (value >= 1000000) return `¥${(value/1000000).toFixed(1)}M`
-                  if (value >= 1000) return `¥${(value/1000).toFixed(1)}K`
-                  return `¥${value.toFixed(0)}`
+                  if (value >= 1000000) return `$${(value/1000000).toFixed(1)}M`
+                  if (value >= 1000) return `$${(value/1000).toFixed(1)}K`
+                  return `$${value.toFixed(0)}`
                 }}
-                label={{ value: 'Spend (¥)', angle: -90, position: 'insideLeft' }}
+                label={{ value: 'Cost ($)', angle: -90, position: 'insideLeft' }}
               />
               
-              {/* Right Y-axis - Clicks */}
+              {/* Right Y-axis - Selected Metric */}
               <YAxis 
-                yAxisId="clicks"
+                yAxisId="metric"
                 orientation="right"
-                domain={clicksScale.domain}
-                ticks={clicksScale.ticks}
+                domain={metricScale.domain}
+                ticks={metricScale.ticks}
                 tick={{ fontSize: 12, fill: '#6B7280' }}
                 tickFormatter={(value) => {
                   if (value >= 1000000) return `${(value/1000000).toFixed(1)}M`
                   if (value >= 1000) return `${(value/1000).toFixed(1)}K`
                   return value.toFixed(0)
                 }}
-                label={{ value: 'Clicks', angle: 90, position: 'insideRight' }}
+                label={{ value: metricConfig.yAxisLabel, angle: 90, position: 'insideRight' }}
               />
               
               <Tooltip content={<CustomTooltip />} />
               <Legend />
               
-              {/* 7-day Spend Rolling Average - Left axis */}
+              {/* 7-day Cost Rolling Average - Left axis */}
               <Line
                 yAxisId="spend"
                 type="monotone"
                 dataKey="spendAvg"
-                stroke="#EF3C99"
-                strokeWidth={3}
-                dot={false}
-                name="7-day Spend Rolling Avg"
-                connectNulls={false}
-              />
-              
-              {/* 7-day Clicks Rolling Average - Right axis */}
-              <Line
-                yAxisId="clicks"
-                type="monotone"
-                dataKey="clicksAvg"
                 stroke="#751FAE"
                 strokeWidth={3}
                 dot={false}
-                name="7-day Clicks Rolling Avg"
+                name="7-day Cost Rolling Avg"
+                connectNulls={false}
+              />
+              
+              {/* 7-day Selected Metric Rolling Average - Right axis */}
+              <Line
+                yAxisId="metric"
+                type="monotone"
+                dataKey={metricConfig.dataKey}
+                stroke={metricConfig.color}
+                strokeWidth={3}
+                dot={false}
+                name={metricConfig.name}
                 connectNulls={false}
               />
             </LineChart>

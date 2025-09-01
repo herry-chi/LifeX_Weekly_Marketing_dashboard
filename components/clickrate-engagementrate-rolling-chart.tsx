@@ -5,7 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LifeCarDailyData } from "@/lib/lifecar-data-processor"
 
-interface ClickRateEngagementRateRollingChartProps {
+interface ClickRateInteractionRateRollingChartProps {
   data: LifeCarDailyData[]
   title?: string
 }
@@ -13,9 +13,9 @@ interface ClickRateEngagementRateRollingChartProps {
 interface RollingAverageData {
   date: string
   clickRateAvg: number
-  engagementRateAvg: number
+  interactionRateAvg: number
   originalClickRate: number
-  originalEngagementRate: number
+  originalInteractionRate: number
 }
 
 // Calculate 7-day rolling average (7 days before, 0 days after) - Same algorithm as other charts
@@ -33,18 +33,18 @@ function calculateRollingAverage(data: LifeCarDailyData[]): RollingAverageData[]
     // Calculate average for this window
     const clickRateSum = windowData.reduce((sum, item) => sum + item.clickRate, 0)
     
-    // Calculate engagement rate for each item: interactions/clicks * 100
-    const engagementRateSum = windowData.reduce((sum, item) => {
-      const engagementRate = item.clicks > 0 ? (item.interactions / item.clicks) * 100 : 0
-      return sum + engagementRate
+    // Calculate interaction rate for each item: interactions/clicks * 100
+    const interactionRateSum = windowData.reduce((sum, item) => {
+      const interactionRate = item.clicks > 0 ? (item.interactions / item.clicks) * 100 : 0
+      return sum + interactionRate
     }, 0)
     
     result.push({
       date: sortedData[i].date,
       clickRateAvg: clickRateSum / windowData.length,
-      engagementRateAvg: engagementRateSum / windowData.length,
+      interactionRateAvg: interactionRateSum / windowData.length,
       originalClickRate: sortedData[i].clickRate,
-      originalEngagementRate: sortedData[i].clicks > 0 ? (sortedData[i].interactions / sortedData[i].clicks) * 100 : 0
+      originalInteractionRate: sortedData[i].clicks > 0 ? (sortedData[i].interactions / sortedData[i].clicks) * 100 : 0
     })
   }
   
@@ -73,18 +73,18 @@ function calculateFixedScale(minValue: number, maxValue: number) {
   }
 }
 
-export function ClickRateEngagementRateRollingChart({ data, title = "7-Day Rolling Average: Click Rate vs Engagement Rate" }: ClickRateEngagementRateRollingChartProps) {
+export function ClickRateInteractionRateRollingChart({ data, title = "7-Day Rolling Average: Click Rate vs Interaction Rate" }: ClickRateInteractionRateRollingChartProps) {
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return []
     return calculateRollingAverage(data)
   }, [data])
 
   // Calculate dynamic scales for both axes
-  const { clickRateScale, engagementRateScale } = useMemo(() => {
+  const { clickRateScale, interactionRateScale } = useMemo(() => {
     if (!chartData || chartData.length === 0) {
       return {
         clickRateScale: { domain: [0, 10], ticks: [0, 2.5, 5, 7.5, 10] },
-        engagementRateScale: { domain: [0, 50], ticks: [0, 10, 20, 30, 40, 50] }
+        interactionRateScale: { domain: [0, 50], ticks: [0, 10, 20, 30, 40, 50] }
       }
     }
     
@@ -93,15 +93,15 @@ export function ClickRateEngagementRateRollingChart({ data, title = "7-Day Rolli
     const minClickRate = clickRateValues.length > 0 ? Math.min(...clickRateValues) : 0
     const maxClickRate = clickRateValues.length > 0 ? Math.max(...clickRateValues) : 10
     
-    // Find min and max for engagement rate with better dynamic range
-    const engagementRateValues = chartData.map(d => d.engagementRateAvg).filter(v => v > 0)
-    const minEngagementRate = engagementRateValues.length > 0 ? Math.min(...engagementRateValues) : 0
-    const maxEngagementRate = engagementRateValues.length > 0 ? Math.max(...engagementRateValues) : 50
+    // Find min and max for interaction rate with better dynamic range
+    const interactionRateValues = chartData.map(d => d.interactionRateAvg).filter(v => v > 0)
+    const minInteractionRate = interactionRateValues.length > 0 ? Math.min(...interactionRateValues) : 0
+    const maxInteractionRate = interactionRateValues.length > 0 ? Math.max(...interactionRateValues) : 50
     
     // Use fixed 1% intervals for both axes
     return {
       clickRateScale: calculateFixedScale(minClickRate, maxClickRate),
-      engagementRateScale: calculateFixedScale(minEngagementRate, maxEngagementRate)
+      interactionRateScale: calculateFixedScale(minInteractionRate, maxInteractionRate)
     }
   }, [chartData])
 
@@ -137,11 +137,11 @@ export function ClickRateEngagementRateRollingChart({ data, title = "7-Day Rolli
             </p>
           </div>
           
-          {/* Engagement Rate Section */}
+          {/* Interaction Rate Section */}
           <div>
-            <p className="text-sm font-semibold text-blue-600 mb-1">🤝 Engagement Rate</p>
+            <p className="text-sm font-semibold text-blue-600 mb-1">🤝 Interaction Rate</p>
             <p className="text-sm text-gray-700">
-              <span className="font-medium">7-day Avg:</span> {dataPoint.engagementRateAvg.toFixed(2)}%
+              <span className="font-medium">7-day Avg:</span> {dataPoint.interactionRateAvg.toFixed(2)}%
             </p>
           </div>
         </div>
@@ -174,7 +174,7 @@ export function ClickRateEngagementRateRollingChart({ data, title = "7-Day Rolli
           📊 {title}
         </CardTitle>
         <p className="text-sm text-gray-600 font-montserrat font-light">
-          7-day rolling average comparison. X-axis: Time, Left Y-axis: Click Rate (%), Right Y-axis: Engagement Rate (% = Interactions/Clicks)
+          7-day rolling average comparison. X-axis: Time, Left Y-axis: Click Rate (%), Right Y-axis: Interaction Rate (% = Interactions/Clicks)
         </p>
       </CardHeader>
       <CardContent>
@@ -206,15 +206,15 @@ export function ClickRateEngagementRateRollingChart({ data, title = "7-Day Rolli
                 label={{ value: 'Click Rate (%)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }}
               />
               
-              {/* Right Y-axis - Engagement Rate */}
+              {/* Right Y-axis - Interaction Rate */}
               <YAxis 
-                yAxisId="engagementRate"
+                yAxisId="interactionRate"
                 orientation="right"
-                domain={engagementRateScale.domain}
-                ticks={engagementRateScale.ticks}
+                domain={interactionRateScale.domain}
+                ticks={interactionRateScale.ticks}
                 tick={{ fontSize: 12, fill: '#6B7280' }}
                 tickFormatter={(value) => `${value.toFixed(1)}%`}
-                label={{ value: 'Engagement Rate (%)', angle: 90, position: 'insideRight', style: { textAnchor: 'middle' } }}
+                label={{ value: 'Interaction Rate (%)', angle: 90, position: 'insideRight', style: { textAnchor: 'middle' } }}
               />
               
               <Tooltip content={<CustomTooltip />} />
@@ -232,15 +232,15 @@ export function ClickRateEngagementRateRollingChart({ data, title = "7-Day Rolli
                 connectNulls={false}
               />
               
-              {/* 7-day Engagement Rate Rolling Average - Right axis */}
+              {/* 7-day Interaction Rate Rolling Average - Right axis */}
               <Line
-                yAxisId="engagementRate"
+                yAxisId="interactionRate"
                 type="monotone"
-                dataKey="engagementRateAvg"
+                dataKey="interactionRateAvg"
                 stroke="#3B82F6"
                 strokeWidth={3}
                 dot={false}
-                name="7-day Engagement Rate Avg"
+                name="7-day Interaction Rate Avg"
                 connectNulls={false}
               />
             </LineChart>
