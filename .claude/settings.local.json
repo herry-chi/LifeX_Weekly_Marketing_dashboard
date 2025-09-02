@@ -23,7 +23,8 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(npm install:*)",
-      "Bash(copy:*)"
+      "Bash(copy:*)",
+      "Bash(cp:*)"
     ],
     "deny": []
   }

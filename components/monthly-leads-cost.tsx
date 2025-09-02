@@ -195,7 +195,7 @@ export function MonthlyLeadsCost({ data, title = "Monthly Leads Cost", startDate
             />
             <Tooltip 
               formatter={(value, name) => {
-                if (name === 'cost') return [`$${Number(value).toFixed(0)}`, 'Total Cost (AUD)'];
+                if (name === 'cost') return [`$${Number(value).toFixed(0)}`, 'Cost per Month (AUD)'];
                 if (name === 'count') return [`${value}`, 'Leads Count'];
                 return [value, name];
               }}
@@ -203,21 +203,27 @@ export function MonthlyLeadsCost({ data, title = "Monthly Leads Cost", startDate
             <Legend 
               content={(props) => {
                 const { payload } = props;
+                // Define the desired order
+                const orderedItems = [
+                  { name: 'Leads Count', color: '#ef3c99' },
+                  { name: 'Cost per Month (AUD)', color: '#751fae' }
+                ];
+                
                 return (
                   <div className="flex flex-wrap justify-center gap-6 mt-4 text-sm font-montserrat">
-                    {payload?.map((entry, index) => (
+                    {orderedItems.map((item, index) => (
                       <div key={`item-${index}`} className="flex items-center gap-2">
                         <div 
                           className="w-3 h-3" 
-                          style={{ backgroundColor: entry.color }}
+                          style={{ backgroundColor: item.color }}
                         />
-                        <span className="text-gray-700">{entry.value}</span>
+                        <span className="text-gray-700">{item.name}</span>
                       </div>
                     ))}
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-green-500" />
                       <span className="text-gray-700">
-                        Avg Total Leads: {averages.avgLeads.toFixed(1)}
+                        Avg Leads: {averages.avgLeads.toFixed(1)}
                       </span>
                     </div>
                   </div>
@@ -237,7 +243,7 @@ export function MonthlyLeadsCost({ data, title = "Monthly Leads Cost", startDate
               dataKey="cost" 
               stroke="#751fae" 
               strokeWidth={3}
-              name="Total Cost (AUD)"
+              name="Cost per Month (AUD)"
               dot={{ fill: '#751fae', strokeWidth: 2, r: 6 }}
               activeDot={{ r: 8, stroke: '#751fae', strokeWidth: 2, fill: '#fff' }}
               label={renderCostLabel}

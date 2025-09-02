@@ -247,34 +247,62 @@ async function processWorkbook(workbook: XLSX.WorkBook) {
     console.log(`Processed ${enhancedWeeklyData.length} weekly records`);
   }
 
-  // Process monthly data - combine multiple monthly sheets
+  // Process monthly data - combine cost data with actual client counts
   const monthlySheetName = "monthly_data";
-  const monthlyCountSheetName = "monthly_count";
   
   let monthlyData = [];
   
-  if (workbook.Sheets[monthlySheetName] && workbook.Sheets[monthlyCountSheetName]) {
+  if (workbook.Sheets[monthlySheetName]) {
     console.log('Processing monthly data...');
     const costData = XLSX.utils.sheet_to_json(workbook.Sheets[monthlySheetName]);
-    const countData = XLSX.utils.sheet_to_json(workbook.Sheets[monthlyCountSheetName]);
     
-    // Merge cost and count data by month
+    // Calculate actual monthly counts from broker_data (Clients_info)
+    const monthlyClientCounts: { [month: string]: number } = {};
+    
+    if (results.broker_data && results.broker_data.length > 0) {
+      results.broker_data.forEach((client: any) => {
+        const clientDate = parseExcelDate(client.date);
+        if (clientDate) {
+          const year = clientDate.getFullYear();
+          const month = clientDate.getMonth() + 1;
+          const monthKey = `${year}/${month.toString().padStart(2, '0')}`;
+          monthlyClientCounts[monthKey] = (monthlyClientCounts[monthKey] || 0) + 1;
+        }
+      });
+      console.log('Monthly client counts from Clients_info:', monthlyClientCounts);
+    }
+    
+    // Merge cost data with actual client counts
     monthlyData = costData.map((costItem: any) => {
       const month = costItem['月份'] || costItem.month;
-      const countItem = countData.find((c: any) => 
-        (c['Month'] || c.month) === month
-      );
+      const actualCount = monthlyClientCounts[month] || 0;
       
       return {
         month: month,
         cost: costItem['消费总额（aud)'] || costItem.cost || 0,
-        count: countItem ? ((countItem as any)['Count'] || (countItem as any).count || 0) : 0
+        count: actualCount  // Use actual count from Clients_info
       };
+    });
+    
+    // Also add any months that have clients but no cost data
+    Object.keys(monthlyClientCounts).forEach(month => {
+      if (!monthlyData.find((m: any) => m.month === month)) {
+        monthlyData.push({
+          month: month,
+          cost: 0,
+          count: monthlyClientCounts[month]
+        });
+      }
+    });
+    
+    // Sort by month
+    monthlyData.sort((a: any, b: any) => {
+      return a.month.localeCompare(b.month);
     });
     
     results.monthly_data = monthlyData;
     
-    console.log(`Processed ${monthlyData.length} monthly records`);
+    console.log(`Processed ${monthlyData.length} monthly records with actual client counts`);
   }
 
   // Process daily cost data if exists (using database_marketing sheet)
@@ -337,26 +365,82 @@ export async function GET() {
 
 // Helper function to process CSV buffer for LifeCAR data
 async function processCSVBuffer(buffer: Buffer): Promise<any> {
-  const text = buffer.toString('utf-8');
+  // Convert buffer to string and remove BOM if present
+  let text = buffer.toString('utf-8');
+  if (text.charCodeAt(0) === 0xFEFF) {
+    text = text.substring(1);
+  }
+  
   const lines = text.split('\n').filter(line => line.trim());
   
   if (lines.length === 0) {
     throw new Error('CSV file is empty');
   }
   
-  // Parse CSV header
-  const headers = lines[0].split(',').map(h => h.trim());
+  // Parse CSV header - handle complex CSV with quotes
+  const parseCSVLine = (line: string): string[] => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    if (current) {
+      result.push(current.trim());
+    }
+    
+    return result;
+  };
   
-  // Parse CSV data
+  // Parse CSV header
+  const headers = parseCSVLine(lines[0]);
+  console.log('CSV Headers:', headers);
+  
+  // Parse CSV data - skip the summary row (row 2) if it exists
   const data = [];
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim());
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    // Skip summary rows (e.g., "合计104条记录")
+    if (line.startsWith('合计') || line.includes('条记录')) {
+      console.log('Skipping summary row:', line.substring(0, 50));
+      continue;
+    }
+    
+    const values = parseCSVLine(line);
     const row: any = {};
     headers.forEach((header, index) => {
-      row[header] = values[index];
+      row[header] = values[index] || '';
     });
     data.push(row);
   }
+  
+  console.log(`Parsed ${data.length} data rows from CSV`);
+  
+  // Save CSV file to public directory for LifeCAR data
+  const publicDir = path.join(process.cwd(), 'public', 'database_lifecar');
+  
+  // Create directory if it doesn't exist
+  if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir, { recursive: true });
+  }
+  
+  // Save the CSV file (keeping original format)
+  const csvPath = path.join(publicDir, 'lifecar-data.csv');
+  fs.writeFileSync(csvPath, text, 'utf-8');
+  console.log('LifeCAR CSV saved to:', csvPath);
   
   // Return formatted data for LifeCAR
   return {

@@ -14,23 +14,26 @@ interface WeeklyLeadsDistributionProps {
   title?: string;
 }
 
-// Set colors for specific brokers
+// 锁死的broker颜色映射 - 与右侧饼图保持完全一致
 const getBrokerColor = (brokerName: string, index: number) => {
-  const brokerColors: { [key: string]: string } = {
+  // 锁死的broker颜色映射（与右侧饼图保持一致）
+  const fixedBrokerColors: { [key: string]: string } = {
     'Ziv': '#FF8C00',
-    'Yuki': '#B07AA1',
+    'Yuki/Ruofan': '#751fae',
     'Jo': '#a2e329',
-    'Amy': '#3cbde5'
+    'Amy': '#3cbde5',
+    '小助手': '#B07AA1',
+    'Linduo': '#8f4abc',
   };
   
-  // If specific broker, return specific color
-  if (brokerColors[brokerName]) {
-    return brokerColors[brokerName];
+  // 直接返回预定义的颜色，不再使用动态逻辑
+  if (fixedBrokerColors[brokerName]) {
+    return fixedBrokerColors[brokerName];
   }
   
-  // Otherwise use company color scheme
-  const companyColors = ['#751fae', '#8f4abc', '#a875ca', '#c29fd9', '#ef3c99', '#f186be', '#f3abd0', '#f4d0e3'];
-  return companyColors[index % companyColors.length];
+  // 对于新的broker，使用备用颜色
+  const fallbackColors = ['#a875ca', '#c29fd9', '#ef3c99', '#f186be', '#f3abd0', '#f4d0e3'];
+  return fallbackColors[0]; // 默认第一个备用颜色
 };
 
 export function WeeklyLeadsDistribution({ data, title = "Weekly Leads Distribution" }: WeeklyLeadsDistributionProps) {
@@ -73,53 +76,52 @@ export function WeeklyLeadsDistribution({ data, title = "Weekly Leads Distributi
         fontSize="12"
         fontWeight="bold"
       >
-        <tspan x={x} y={y-6}>{name}</tspan>
-        <tspan x={x} y={y+6}>{value}</tspan>
+        {name}
       </text>
     );
   };
 
   return (
-    <div className="w-full h-80 relative">
+    <div className="w-full relative">
       {title && <h2 className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">{title}</h2>}
       
-      {/* Total display in top-left corner */}
-      <div className="absolute top-4 left-0 z-10 bg-white/90 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-slate-200">
-        <div className="text-sm font-medium font-montserrat font-semibold" style={{color: '#0ea5e9'}}>Total</div>
-        <div className="text-3xl font-bold font-montserrat" style={{color: '#1e293b'}}>{totalClients}</div>
-        <div className="text-xs font-medium font-montserrat font-light" style={{color: '#64748b'}}>Leads</div>
+      
+      {/* 饼图 */}
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={chartData}
+              cx="50%"
+              cy="50%"
+              labelLine={false}
+              label={renderLabel}
+              outerRadius={120}
+              innerRadius={0}
+              fill="#8884d8"
+              dataKey="value"
+            >
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={getBrokerColor(entry.name, index)} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(value) => [`${value} clients`, 'Client Count']} />
+          </PieChart>
+        </ResponsiveContainer>
       </div>
       
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={chartData}
-            cx="50%"
-            cy="55%"
-            labelLine={false}
-            label={renderLabel}
-            outerRadius={100}
-            innerRadius={0}
-            fill="#8884d8"
-            dataKey="value"
-          >
-            {chartData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={getBrokerColor(entry.name, index)} />
-            ))}
-          </Pie>
-          <Tooltip formatter={(value) => [`${value} clients`, 'Client Count']} />
-          <Legend 
-            verticalAlign="top"
-            align="right"
-            layout="vertical"
-            iconType="circle"
-            wrapperStyle={{
-              paddingLeft: '10px',
-              fontSize: '12px'
-            }}
-          />
-        </PieChart>
-      </ResponsiveContainer>
+      {/* 自定义图例 - 与右侧图表一致的间距 */}
+      <div className="flex flex-wrap justify-center gap-3 mt-4">
+        {chartData.map((entry, index) => (
+          <div key={entry.name} className="flex items-center gap-1">
+            <div 
+              className="w-3 h-3 rounded-full" 
+              style={{ backgroundColor: getBrokerColor(entry.name, index) }}
+            />
+            <span className="text-sm text-gray-700 font-montserrat font-light">{entry.name}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

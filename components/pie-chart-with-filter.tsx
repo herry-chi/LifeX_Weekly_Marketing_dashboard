@@ -38,28 +38,36 @@ function processBrokerData(brokerDataJson: any[], startDate?: string, endDate?: 
     const brokerCounts = clientsData.reduce((acc: any, client: any) => {
       let broker = client.broker || 'Unknown'
       
-      // Normalize broker names
+      // Normalize broker names - 将 Yuki 和若凡合并，将Zoey合并到小助手
       if (broker.toLowerCase() === 'yuki') {
-        broker = 'Yuki'
+        broker = 'Yuki/Ruofan'
       } else if (broker.toLowerCase() === 'ruofan') {
-        broker = 'Yuki'
+        broker = 'Yuki/Ruofan'
       } else if (broker === 'Linudo') {
         broker = 'Linduo'
       } else if (broker.toLowerCase() === 'ziv') {
         broker = 'Ziv'
+      } else if (broker.toLowerCase() === 'zoey') {
+        broker = '小助手'
+      } else if (broker === '小助手') {
+        broker = '小助手'
       }
       
       acc[broker] = (acc[broker] || 0) + 1
       return acc
     }, {})
 
-    const total = clientsData.length
-    return Object.entries(brokerCounts)
+    // 过滤掉不需要的broker - 移除 ruofan，因为已经与 Yuki 合并；Zoey已合并到小助手
+    const excludeBrokers = ['Unknown'];
+    const filteredBrokers = Object.entries(brokerCounts)
       .filter(([broker, count]: [string, any]) => {
-        // 过滤掉不需要的broker
-        const excludeBrokers = ['ruofan', 'Unknown'];
         return count > 0 && !excludeBrokers.includes(broker);
-      })
+      });
+    
+    // 计算过滤后的总数用于百分比计算
+    const total = filteredBrokers.reduce((sum, [broker, count]) => sum + (count as number), 0);
+    
+    return filteredBrokers
       .map(([broker, count]: [string, any]) => ({
         broker,
         count,
@@ -101,49 +109,54 @@ export function PieChartWithFilter({ startDate = '', endDate = '', brokerData = 
   }, []);
 
   return (
-    <div className="p-6">
-      {/* 数据状态提示 */}
-      {startDate && endDate && (
-        <div className="mb-4">
-          {totalClients === 0 ? (
-            <div className="text-xs text-orange-600 bg-orange-50 p-2 rounded font-montserrat font-light">
-              ⚠️ No data in this time range. Excel file data only goes up to July 6, 2025.
-            </div>
-          ) : (
-            <div className="text-xs text-green-600 bg-green-50 p-2 rounded font-montserrat font-light">
-              ✅ Filter successful, found {totalClients} client records
-            </div>
-          )}
+    <div className="p-6 flex flex-col h-full">
+      {/* 饼图标题 */}
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-gray-800 font-montserrat">Weekly Broker Avg Leads (Filtered)</h3>
+      </div>
+
+      {/* KPI 卡片 - Total Leads This Week */}
+      <div className="mb-6 bg-white/90 backdrop-blur-sm rounded-lg shadow-md border border-gray-200/60 p-4 text-center hover:shadow-lg transition-all duration-200">
+        <div className="text-sm font-semibold text-[#0ea5e9] mb-2 font-montserrat">Total Leads This Week</div>
+        <div className="text-3xl font-semibold text-[#1e293b] font-montserrat">
+          {totalClients}
         </div>
-      )}
+      </div>
 
       {/* 饼图 */}
-      <WeeklyLeadsDistribution 
-        data={processedBrokerData} 
-        title=""
-      />
+      <div className="flex-1">
+        <WeeklyLeadsDistribution 
+          data={processedBrokerData} 
+          title=""
+        />
+      </div>
       
       {/* Broker统计信息 */}
-      <div className="-mt-4">        
+      <div className="mt-2">        
         {/* 详细列表 - 两列显示 */}
         <div className="grid grid-cols-2 gap-1">
           {processedBrokerData.length > 0 ? (
             processedBrokerData.map((broker, index) => {
-              // 使用与饼图一致的颜色映射
-              const getBrokerColor = (brokerName: string, index: number) => {
-                const brokerColors: { [key: string]: string } = {
+              // 使用与右侧饼图完全一致的锁死颜色映射
+              const getBrokerColor = (brokerName: string) => {
+                // 锁死的broker颜色映射（与右侧饼图保持一致）
+                const fixedBrokerColors: { [key: string]: string } = {
                   'Ziv': '#FF8C00',
-                  'Yuki': '#B07AA1',
-                  'Jo': '#a2e329',
-                  'Amy': '#3cbde5'
+                  'Yuki/Ruofan': '#751fae',
+                  'Jo': '#a2e329', 
+                  'Amy': '#3cbde5',
+                  '小助手': '#B07AA1',
+                  'Linduo': '#8f4abc',
                 };
                 
-                if (brokerColors[brokerName]) {
-                  return brokerColors[brokerName];
+                // 直接返回预定义的颜色，不再使用动态逻辑
+                if (fixedBrokerColors[brokerName]) {
+                  return fixedBrokerColors[brokerName];
                 }
                 
-                const companyColors = ['#751fae', '#8f4abc', '#a875ca', '#c29fd9', '#ef3c99', '#f186be', '#f3abd0', '#f4d0e3'];
-                return companyColors[index % companyColors.length];
+                // 对于新的broker，使用备用颜色
+                const fallbackColors = ['#a875ca', '#c29fd9', '#ef3c99', '#f186be', '#f3abd0', '#f4d0e3'];
+                return fallbackColors[0]; // 默认第一个备用颜色
               };
 
               return (
@@ -151,7 +164,7 @@ export function PieChartWithFilter({ startDate = '', endDate = '', brokerData = 
                   <div 
                     className="w-3 h-3 rounded-full flex-shrink-0" 
                     style={{ 
-                      backgroundColor: getBrokerColor(broker.broker, index)
+                      backgroundColor: getBrokerColor(broker.broker)
                     }}
                   />
                   <span className="text-xs font-medium text-gray-800 min-w-[30px]">{broker.broker}</span>

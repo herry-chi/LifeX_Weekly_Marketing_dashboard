@@ -35,7 +35,7 @@ const renderCostLabel = (props: any) => {
   );
 };
 
-export function WeeklyLeadsCost({ data, title = "Weekly Leads Cost", startDate, endDate }: WeeklyLeadsCostProps) {
+export function WeeklyLeadsCost({ data, title = "Weekly Cost per Lead", startDate, endDate }: WeeklyLeadsCostProps) {
   // Comment状态
   const [comment, setComment] = useState('');
   
@@ -149,7 +149,7 @@ export function WeeklyLeadsCost({ data, title = "Weekly Leads Cost", startDate, 
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-orange-500" />
                       <span className="text-gray-700">
-                        AVG: ${averageCost.toFixed(2)}
+                        Avg Cost per Lead: ${averageCost.toFixed(2)}
                       </span>
                     </div>
                   </div>

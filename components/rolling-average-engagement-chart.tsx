@@ -90,7 +90,7 @@ export function RollingAverageEngagementChart() {
             <YAxis 
               yAxisId="left"
               className="text-xs"
-              label={{ value: '7天rolling avg消费 (¥)', angle: -90, position: 'insideLeft' }}
+              label={{ value: '7天rolling avg消费 ($)', angle: -90, position: 'insideLeft' }}
             />
             <YAxis 
               yAxisId="right"
@@ -101,7 +101,7 @@ export function RollingAverageEngagementChart() {
             />
             <Tooltip 
               formatter={(value: number, name: string) => {
-                if (name === '7天rolling avg消费') return `¥${value.toFixed(2)}`
+                if (name === '7天rolling avg消费') return `$${value.toFixed(2)}`
                 return value.toFixed(2)
               }}
             />

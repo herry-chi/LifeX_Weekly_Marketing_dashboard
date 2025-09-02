@@ -57,7 +57,7 @@ const renderCountLabel = (props: any) => {
   );
 };
 
-export function MonthlyPerLeadsCost({ data, title = "Monthly Per Leads Cost", startDate, endDate }: MonthlyPerLeadsCostProps) {
+export function MonthlyPerLeadsCost({ data, title = "Monthly Cost per Lead", startDate, endDate }: MonthlyPerLeadsCostProps) {
   console.log('MonthlyPerLeadsCost component received data:', data);
   
   // Comment状态
@@ -76,7 +76,7 @@ export function MonthlyPerLeadsCost({ data, title = "Monthly Per Leads Cost", st
     return (
       <div className="w-full h-[500px] flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4 font-montserrat">Monthly Per Leads Cost</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 font-montserrat">Monthly Cost per Lead</h2>
           <p className="text-gray-500 font-montserrat font-light">No data available</p>
         </div>
       </div>
@@ -134,7 +134,7 @@ export function MonthlyPerLeadsCost({ data, title = "Monthly Per Leads Cost", st
     <div className="w-full">
       <div className="h-[500px]">
         <h2 className="text-xl font-semibold text-gray-900 mb-4 font-montserrat">
-          Monthly Per Leads Cost
+          Monthly Cost per Lead
           {startDate && endDate && (
             <span className="text-sm text-gray-500 ml-2 font-montserrat font-light">({startDate} to {endDate})</span>
           )}
@@ -176,7 +176,7 @@ export function MonthlyPerLeadsCost({ data, title = "Monthly Per Leads Cost", st
             />
             <Tooltip 
               formatter={(value, name) => {
-                if (name === 'perLeadsCost') return [`$${Number(value).toFixed(1)}`, 'Per Leads Cost (AUD)'];
+                if (name === 'perLeadsCost') return [`$${Number(value).toFixed(1)}`, 'Cost per Lead (AUD)'];
                 if (name === 'count') return [`${value}`, 'Leads Count'];
                 return [value, name];
               }}
@@ -184,19 +184,25 @@ export function MonthlyPerLeadsCost({ data, title = "Monthly Per Leads Cost", st
             <Legend 
               content={(props) => {
                 const { payload } = props;
+                // Define the desired order
+                const orderedItems = [
+                  { name: 'Leads Count', color: '#ef3c99' },
+                  { name: 'Cost per Lead (AUD)', color: '#3CBDE5' }
+                ];
+                
                 return (
                   <div className="flex flex-wrap justify-center gap-6 mt-4 text-sm font-montserrat">
-                    {payload?.map((entry, index) => (
+                    {orderedItems.map((item, index) => (
                       <div key={`item-${index}`} className="flex items-center gap-2">
                         <div 
                           className="w-3 h-3" 
-                          style={{ backgroundColor: entry.color }}
+                          style={{ backgroundColor: item.color }}
                         />
-                        <span className="text-gray-700">{entry.value}</span>
+                        <span className="text-gray-700">{item.name}</span>
                       </div>
                     ))}
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-purple-500" />
+                      <div className="w-3 h-3 bg-green-500" />
                       <span className="text-gray-700">
                         Avg Leads: {averages.avgLeads.toFixed(1)}
                       </span>
@@ -218,7 +224,7 @@ export function MonthlyPerLeadsCost({ data, title = "Monthly Per Leads Cost", st
               dataKey="perLeadsCost" 
               stroke="#3CBDE5" 
               strokeWidth={3}
-              name="Per Leads Cost (AUD)"
+              name="Cost per Lead (AUD)"
               dot={{ fill: '#3CBDE5', strokeWidth: 2, r: 6 }}
               activeDot={{ r: 8, stroke: '#3CBDE5', strokeWidth: 2, fill: '#fff' }}
               label={renderPerLeadsCostLabel}

@@ -8,14 +8,14 @@ import { WeekdayChartWithFilter } from '@/components/weekday-chart-with-filter';
 // 移除静态导入，改为接收props
 
 interface AcquisitionTimeAnalysisProps {
-  startDate?: string;
-  endDate?: string;
   brokerData?: any[];
   monthlyData?: any[];
   dailyCostData?: any[];
+  startDate?: string;
+  endDate?: string;
 }
 
-export function AcquisitionTimeAnalysis({ startDate, endDate, brokerData = [], monthlyData = [], dailyCostData = [] }: AcquisitionTimeAnalysisProps) {
+export function AcquisitionTimeAnalysis({ brokerData = [], monthlyData = [], dailyCostData = [], startDate, endDate }: AcquisitionTimeAnalysisProps) {
   const [comment, setComment] = useState('');
   
   // 从localStorage加载保存的评论
@@ -38,7 +38,12 @@ export function AcquisitionTimeAnalysis({ startDate, endDate, brokerData = [], m
 
       {/* Weekday Distribution Chart */}
       <div className="mb-6">
-        <WeekdayChartWithFilter brokerData={brokerData} dailyCostData={dailyCostData} />
+        <WeekdayChartWithFilter 
+          brokerData={brokerData} 
+          dailyCostData={dailyCostData} 
+          startDate={startDate}
+          endDate={endDate}
+        />
       </div>
 
       {/* 月度趋势 - 替换为MonthlyPatternChart */}
