@@ -16,11 +16,12 @@ interface AccountSwitcherProps {
 }
 
 const accounts = [
-  { value: "xiaowang", label: "澳洲小王Broker咨询", icon: "👨‍💼" },
-  { value: "lifecar", label: "LifeCAR澳洲Broker", icon: "🚗" },
+  { value: "xiaowang-test", label: "澳洲小王Broker咨询" },
+  { value: "lifecar", label: "LifeCAR澳洲Broker" },
+  { value: "xiaowang", label: "小王咨询 Old Version" },
 ]
 
-export function AccountSwitcher({ onAccountChange, defaultAccount = "xiaowang" }: AccountSwitcherProps) {
+export function AccountSwitcher({ onAccountChange, defaultAccount = "xiaowang-test" }: AccountSwitcherProps) {
   const [selectedAccount, setSelectedAccount] = React.useState(defaultAccount)
 
   const handleAccountChange = (account: string) => {
@@ -39,12 +40,9 @@ export function AccountSwitcher({ onAccountChange, defaultAccount = "xiaowang" }
       <Select value={selectedAccount} onValueChange={handleAccountChange}>
         <SelectTrigger className="w-[160px] sm:w-[200px] h-8 bg-white/90 backdrop-blur-sm border-purple-200 text-gray-700 hover:border-purple-300 hover:bg-purple-50 transition-all duration-200 shadow-sm">
           <SelectValue>
-            <div className="flex items-center gap-2">
-              <span className="text-base">{selectedAccountData?.icon}</span>
-              <span className="text-sm font-medium truncate">
-                {selectedAccountData?.label || "Select Account"}
-              </span>
-            </div>
+            <span className="text-sm font-medium truncate">
+              {selectedAccountData?.label || "Select Account"}
+            </span>
           </SelectValue>
         </SelectTrigger>
         <SelectContent className="bg-white/95 backdrop-blur-xl border-purple-200/50 shadow-xl z-[200]">
@@ -54,10 +52,7 @@ export function AccountSwitcher({ onAccountChange, defaultAccount = "xiaowang" }
               value={account.value}
               className="hover:bg-purple-50 focus:bg-purple-100 cursor-pointer text-gray-900"
             >
-              <div className="flex items-center gap-2">
-                <span className="text-base">{account.icon}</span>
-                <span className="font-medium text-gray-900">{account.label}</span>
-              </div>
+              <span className="font-medium text-gray-900">{account.label}</span>
             </SelectItem>
           ))}
         </SelectContent>

@@ -1,10 +1,17 @@
 "use client"
 
 import React, { useMemo, useCallback, useState } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, ReferenceLine } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { LifeCarDailyData } from "@/lib/lifecar-data-processor"
+
+interface LifeCarNote {
+  发布时间: string
+  类型: string
+  名称: string
+  链接: string
+}
 
 interface CostPerFollowerDailyChartProps {
   data: LifeCarDailyData[]
@@ -12,6 +19,13 @@ interface CostPerFollowerDailyChartProps {
   startDate?: string
   endDate?: string
   allData?: LifeCarDailyData[] // All unfiltered data for toggle functionality
+  selectedMetric?: 'views' | 'likes' | 'followers' // Shared metric state (mapping from ViewsCostDailyChart)
+  onMetricChange?: (metric: 'views' | 'likes' | 'followers') => void // Shared metric change handler
+  isFiltered?: boolean // Shared filter state
+  onFilterChange?: (filtered: boolean) => void // Shared filter change handler
+  selectedDates?: string[] // Selected dates for vertical lines
+  notesWeekdayCount?: {[key: string]: number} // Notes count by weekday
+  notesData?: LifeCarNote[] // Notes data for tooltip display
 }
 
 interface DailyData {
@@ -26,7 +40,11 @@ type MetricType = 'costPerFollower' | 'costPerClick' | 'costPerLike'
 
 // Process data for daily cost metrics
 function processDailyData(data: LifeCarDailyData[]): DailyData[] {
-  const sortedData = [...data].sort((a, b) => a.date.localeCompare(b.date))
+  const sortedData = [...data].sort((a, b) => {
+    const dateA = typeof a.date === 'string' ? a.date : String(a.date);
+    const dateB = typeof b.date === 'string' ? b.date : String(b.date);
+    return dateA.localeCompare(dateB);
+  })
   
   return sortedData.map(item => ({
     date: item.date,
@@ -184,10 +202,93 @@ const CostMetricLabel = (props: any) => {
   )
 }
 
-export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis", startDate, endDate, allData }: CostPerFollowerDailyChartProps) {
-  // State for filter toggle and metric selection
-  const [isFiltered, setIsFiltered] = useState(true)
-  const [selectedMetric, setSelectedMetric] = useState<MetricType>('costPerFollower')
+export function CostPerFollowerDailyChart({
+  data,
+  title = "Daily Cost Analysis",
+  startDate,
+  endDate,
+  allData,
+  selectedMetric: propSelectedMetric,
+  onMetricChange,
+  isFiltered: propIsFiltered,
+  onFilterChange,
+  selectedDates = [],
+  notesWeekdayCount = {},
+  notesData = []
+}: CostPerFollowerDailyChartProps) {
+  // Get posts for a specific date (only if the date is selected)
+  const getPostsForDate = (dateStr: string): LifeCarNote[] => {
+    if (!notesData || notesData.length === 0) {
+      return []
+    }
+
+    // Extract date part from dateStr (YYYY-MM-DD format)
+    const targetDate = dateStr.split(' ')[0]
+
+    // Check if this date is selected in the Posts modal
+    const isDateSelected = selectedDates.includes(targetDate)
+
+    if (!isDateSelected) {
+      return []
+    }
+
+    // Find all posts for this date
+    return notesData.filter(note => {
+      if (!note.发布时间) return false
+      const noteDate = note.发布时间.split(' ')[0] // Extract date part
+      return noteDate === targetDate
+    })
+  }
+
+  // Use shared state from props, fallback to default values
+  const isFiltered = propIsFiltered ?? true
+  const setIsFiltered = onFilterChange ?? (() => {})
+  
+  // Map shared metric from ViewsCostDailyChart to local metric type
+  const selectedMetric = useMemo(() => {
+    if (propSelectedMetric) {
+      switch (propSelectedMetric) {
+        case 'views': return 'costPerClick' as MetricType
+        case 'likes': return 'costPerLike' as MetricType
+        case 'followers': return 'costPerFollower' as MetricType
+        default: return 'costPerFollower'
+      }
+    }
+    return 'costPerFollower'
+  }, [propSelectedMetric])
+  
+  // Update shared state when local metric changes
+  const setSelectedMetric = (metric: MetricType) => {
+    if (onMetricChange) {
+      switch (metric) {
+        case 'costPerClick': onMetricChange('views'); break
+        case 'costPerLike': onMetricChange('likes'); break
+        case 'costPerFollower': onMetricChange('followers'); break
+      }
+    } else {
+      setLocalMetric(metric)
+    }
+  }
+
+  // Handle metric selection - simple synchronization
+  const handleMetricSelect = (metric: MetricType) => {
+    // Map the clicked metric to shared state format and update
+    if (onMetricChange) {
+      switch (metric) {
+        case 'costPerClick': onMetricChange('views'); break
+        case 'costPerLike': onMetricChange('likes'); break
+        case 'costPerFollower': onMetricChange('followers'); break
+      }
+    }
+  }
+
+  // Handle filter toggle - simple synchronization
+  const handleFilterToggle = () => {
+    const newFilterState = !isFiltered
+    if (onFilterChange) {
+      onFilterChange(newFilterState)
+    }
+  }
 
   // Check if the date range is exactly 7 days
   const isSevenDayRange = useMemo(() => {
@@ -220,14 +321,41 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
     if (!chartData || chartData.length === 0) {
       return { domain: [0, 1], ticks: [0, 0.25, 0.5, 0.75, 1] }
     }
-    
+
     // Find min and max for selected metric
     const metricValues = chartData.map(d => d[selectedMetric]).filter(v => v > 0)
     const minMetric = metricValues.length > 0 ? Math.min(...metricValues) : 0
     const maxMetric = metricValues.length > 0 ? Math.max(...metricValues) : 1
-    
+
     return calculateNiceScale(minMetric, maxMetric, 5)
   }, [chartData, selectedMetric])
+
+  // Calculate averages as SUM(Cost)/SUM(Metric) from filtered time period
+  const averages = useMemo(() => {
+    if (!activeData || activeData.length === 0) {
+      return { avgMetric: 0 }
+    }
+
+    // Calculate total cost and total metric from raw data
+    const totalCost = activeData.reduce((sum, item) => sum + item.spend, 0)
+    let totalMetric = 0
+
+    switch (selectedMetric) {
+      case 'costPerClick':
+        totalMetric = activeData.reduce((sum, item) => sum + item.clicks, 0)
+        break
+      case 'costPerLike':
+        totalMetric = activeData.reduce((sum, item) => sum + item.likes, 0)
+        break
+      case 'costPerFollower':
+        totalMetric = activeData.reduce((sum, item) => sum + item.followers, 0)
+        break
+    }
+
+    const avgMetric = totalMetric > 0 ? totalCost / totalMetric : 0
+
+    return { avgMetric }
+  }, [activeData, selectedMetric])
 
   // Format date display
   const formatDate = (dateStr: string) => {
@@ -241,6 +369,36 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
     
     // Otherwise, it's already a weekday string (Mon, Tue, etc.)
     return dateStr
+  }
+
+  // Custom tick component for multi-line display
+  const CustomTick = (props: any) => {
+    const { x, y, payload } = props
+    const dateStr = payload.value
+    
+    // Show Posts count when: (non-7-day range) OR (using "All data" mode in chart)
+    if (!isSevenDayRange || !isFiltered) {
+      const postsCount = notesWeekdayCount && notesWeekdayCount[dateStr] ? notesWeekdayCount[dateStr] : 0
+      return (
+        <g transform={`translate(${x},${y})`}>
+          <text x={0} y={0} dy={16} textAnchor="middle" fill="#6B7280" fontSize="12">
+            {dateStr}
+          </text>
+          <text x={0} y={0} dy={32} textAnchor="middle" fill="#6B7280" fontSize="11">
+            {postsCount} Posts
+          </text>
+        </g>
+      )
+    }
+    
+    // For 7-day range, use regular formatting
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={16} textAnchor="middle" fill="#6B7280" fontSize="12">
+          {formatDate(dateStr)}
+        </text>
+      </g>
+    )
   }
 
   // Get metric display info
@@ -259,30 +417,50 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const dataPoint = chartData.find(d => d.date === label)
-      
+
       if (dataPoint) {
         let formattedDate: string
-        
+
         if (isSevenDayRange && isFiltered) {
           // For 7-day range with filter, show full date
-          formattedDate = new Date(label).toLocaleDateString('en-US', { 
-            weekday: 'short', 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric' 
+          formattedDate = new Date(label).toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
           })
         } else {
           // For weekday grouping, show weekday and indicate it's an average
           formattedDate = `${label} (Average)`
         }
-        
+
+        // Get posts for this date
+        const postsForDate = getPostsForDate(label)
+
         const metricInfo = getMetricInfo(selectedMetric)
         const value = dataPoint[selectedMetric]
-        
+
         return (
-          <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-4 shadow-xl min-w-[200px]">
+          <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-4 shadow-xl min-w-[240px] max-w-[400px]">
             <p className="font-bold text-gray-900 mb-3 border-b pb-2">{formattedDate}</p>
-            
+
+            {/* Posts Section - Show only if there are posts for this date */}
+            {postsForDate.length > 0 && (
+              <div className="mb-3">
+                <p className="text-sm font-semibold mb-2 text-purple-700">
+                  📝 Posts ({postsForDate.length})
+                </p>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {postsForDate.map((post, index) => (
+                    <div key={index} className="text-xs p-2 bg-purple-50 rounded border-l-2 border-purple-300">
+                      <div className="font-medium text-purple-800 line-clamp-2">{post.名称}</div>
+                      <div className="text-purple-600 text-xs mt-1">{post.类型}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Selected Metric Section */}
             <div>
               <p className="text-sm font-semibold mb-1" style={{ color: metricInfo.color }}>
@@ -303,8 +481,8 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
     return (
       <Card className="bg-white/95 backdrop-blur-xl shadow-lg border border-gray-200/50">
         <CardHeader>
-          <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] bg-clip-text text-transparent font-montserrat">
-            📊 {title}
+          <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -321,8 +499,8 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
       <CardHeader>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] bg-clip-text text-transparent font-montserrat">
-              📊 {currentMetricInfo.label} {(!isSevenDayRange || !isFiltered) && "(Weekday Averages)"}
+            <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+              {currentMetricInfo.label} {(!isSevenDayRange || !isFiltered) && "(Weekday Averages)"}
             </CardTitle>
           </div>
           
@@ -333,7 +511,7 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
               <Button
                 variant={selectedMetric === 'costPerClick' ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedMetric('costPerClick')}
+                onClick={() => handleMetricSelect('costPerClick')}
                 className={selectedMetric === 'costPerClick' 
                   ? 'bg-[#3CBDE5] hover:bg-[#2563EB] text-white border-0' 
                   : 'border-[#3CBDE5] text-[#3CBDE5] hover:bg-[#3CBDE5] hover:text-white'
@@ -344,7 +522,7 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
               <Button
                 variant={selectedMetric === 'costPerLike' ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedMetric('costPerLike')}
+                onClick={() => handleMetricSelect('costPerLike')}
                 className={selectedMetric === 'costPerLike' 
                   ? 'bg-[#EF3C99] hover:bg-[#E91E63] text-white border-0' 
                   : 'border-[#EF3C99] text-[#EF3C99] hover:bg-[#EF3C99] hover:text-white'
@@ -355,7 +533,7 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
               <Button
                 variant={selectedMetric === 'costPerFollower' ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedMetric('costPerFollower')}
+                onClick={() => handleMetricSelect('costPerFollower')}
                 className={selectedMetric === 'costPerFollower' 
                   ? 'bg-[#10B981] hover:bg-[#059669] text-white border-0' 
                   : 'border-[#10B981] text-[#10B981] hover:bg-[#10B981] hover:text-white'
@@ -369,7 +547,7 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
             <Button
               variant={isFiltered ? "default" : "outline"}
               size="sm"
-              onClick={() => setIsFiltered(!isFiltered)}
+              onClick={handleFilterToggle}
               className={isFiltered 
                 ? 'bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] hover:from-[#6B1F9A] hover:to-[#7C3AED] text-white border-0' 
                 : 'border-[#751FAE] text-[#751FAE] hover:bg-[#751FAE] hover:text-white'
@@ -389,11 +567,8 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
             >
               <XAxis 
                 dataKey="date" 
-                tick={{ fontSize: 12, fill: '#6B7280' }}
-                tickFormatter={formatDate}
-                angle={-45}
-                textAnchor="end"
-                height={80}
+                tick={<CustomTick />}
+                height={100}
                 scale="point"
                 padding={{ left: 30, right: 30 }}
               />
@@ -412,16 +587,62 @@ export function CostPerFollowerDailyChart({ data, title = "Daily Cost Analysis",
               />
               
               <Tooltip content={<CustomTooltip />} />
-              <Legend />
+              <Legend
+                payload={[
+                  {
+                    value: `${currentMetricInfo.label} (Avg: $${averages.avgMetric.toFixed(2)})`,
+                    type: 'line',
+                    color: currentMetricInfo.color
+                  }
+                ]}
+              />
               
+              {/* Average Reference Line */}
+              {averages.avgMetric > 0 && (
+                <ReferenceLine
+                  y={averages.avgMetric}
+                  stroke={`${currentMetricInfo.color}80`}
+                  strokeWidth={2}
+                  strokeDasharray="8 8"
+                />
+              )}
+
               {/* Selected Metric Line */}
               <Line
                 type="monotone"
                 dataKey={selectedMetric}
                 stroke={currentMetricInfo.color}
                 strokeWidth={3}
-                dot={{ fill: currentMetricInfo.color, strokeWidth: 2, r: 4 }}
-                name={`${currentMetricInfo.label} ($)`}
+                dot={(props: any) => {
+                  const isSelected = selectedDates.length > 0 && props.payload && selectedDates.includes(props.payload.date)
+
+                  return (
+                    <g>
+                      {/* Normal dot - same format as other lines */}
+                      <circle
+                        cx={props.cx}
+                        cy={props.cy}
+                        r={4}
+                        fill={currentMetricInfo.color}
+                        strokeWidth={2}
+                      />
+                      {/* Vertical line for selected dates */}
+                      {isSelected && (
+                        <line
+                          x1={props.cx}
+                          y1={30}
+                          x2={props.cx}
+                          y2={280}
+                          stroke="#6B7280"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          opacity={0.8}
+                        />
+                      )}
+                    </g>
+                  )
+                }}
+                name={`${currentMetricInfo.label} (Avg: $${averages.avgMetric.toFixed(2)})`}
                 connectNulls={false}
               />
               

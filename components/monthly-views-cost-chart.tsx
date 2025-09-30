@@ -9,6 +9,9 @@ import { LifeCarDailyData } from "@/lib/lifecar-data-processor"
 interface MonthlyViewsCostChartProps {
   data: LifeCarDailyData[]
   title?: string
+  selectedMetric?: 'views' | 'likes' | 'followers'
+  onMetricChange?: (metric: 'views' | 'likes' | 'followers') => void
+  notesMonthlyCount?: {[key: string]: number}
 }
 
 interface MonthlyData {
@@ -106,21 +109,41 @@ function calculateNiceScale(minValue: number, maxValue: number, targetTicks: num
 
 // Label components with simple position-based logic
 const RelativeMetricLabel = (props: any) => {
-  const { x, y, value, viewBox, color } = props
+  const { x, y, value, index, payload, viewBox, config, scales, data, color } = props
+  
+  // Try to get the data point - payload might be undefined, so try other props
+  const dataPoint = payload || (data && data[index])
+  
   if (!value || value === 0) return null
   
   const text = value >= 1000 ? `${(value/1000).toFixed(1)}K` : value.toString()
-  const width = 36
+  const width = config?.dataKey === 'followers' ? 36 : 30
   const height = 14
   
-  // Simple logic: if point is in upper half of chart, label goes above
-  // if point is in lower half, label goes below
-  const chartHeight = viewBox?.height || 300
-  const chartTop = viewBox?.y || 0
-  const relativePosition = (y - chartTop) / chartHeight
+  // Default positioning fallback
+  let metricShouldBeAbove = y < 200
   
-  const shouldPlaceAbove = relativePosition < 0.5
-  const labelY = shouldPlaceAbove ? y - height - 8 : y + 8
+  // Point-specific positioning: compare this data point's values
+  if (dataPoint && scales?.costScale && scales?.metricScale && config) {
+    const costValue = dataPoint.cost || 0
+    const metricValue = dataPoint[config.dataKey] || 0
+    
+    // Get Y-axis maximum values for this specific data point
+    const costMaxValue = scales.costScale.domain?.[1] || 1000
+    const metricMaxValue = scales.metricScale.domain?.[1] || 100
+    
+    // Calculate position ratio relative to axis maximum for THIS data point only
+    const costRatio = costValue / costMaxValue
+    const metricRatio = metricValue / metricMaxValue
+    
+    // For THIS specific point: if metric ratio is higher, metric label goes above
+    metricShouldBeAbove = metricRatio > costRatio
+  }
+  
+  const labelY = metricShouldBeAbove ? y - height - 8 : y + 8
+  
+  // Use the color directly from config or fallback
+  const labelColor = config?.color || color || '#3CBDE5'
   
   return (
     <g>
@@ -129,8 +152,8 @@ const RelativeMetricLabel = (props: any) => {
         y={labelY}
         width={width}
         height={height}
-        fill={`${color}CC`}
-        stroke={color}
+        fill={`${labelColor}CC`}
+        stroke={labelColor}
         strokeWidth="1"
         rx="3"
       />
@@ -150,22 +173,38 @@ const RelativeMetricLabel = (props: any) => {
 }
 
 const RelativeCostLabel = (props: any) => {
-  const { x, y, value, viewBox } = props
+  const { x, y, value, index, payload, viewBox, metricConfig, scales, data } = props
+  
+  // Try to get the data point - payload might be undefined, so try other props  
+  const dataPoint = payload || (data && data[index])
+  
   if (!value || value === 0) return null
   
   const text = `$${value >= 1000 ? `${(value/1000).toFixed(1)}K` : value.toFixed(0)}`
   const width = 36
   const height = 14
   
-  // Opposite logic from metric labels to avoid overlap
-  // if point is in upper half of chart, label goes below
-  // if point is in lower half, label goes above
-  const chartHeight = viewBox?.height || 300
-  const chartTop = viewBox?.y || 0
-  const relativePosition = (y - chartTop) / chartHeight
+  // Default positioning fallback
+  let costShouldBeAbove = y > 200
   
-  const shouldPlaceAbove = relativePosition > 0.5
-  const labelY = shouldPlaceAbove ? y - height - 8 : y + 8
+  // Point-specific positioning: compare this data point's values
+  if (dataPoint && scales?.costScale && scales?.metricScale && metricConfig) {
+    const costValue = dataPoint.cost || 0
+    const metricValue = dataPoint[metricConfig.dataKey] || 0
+    
+    // Get Y-axis maximum values for this specific data point
+    const costMaxValue = scales.costScale.domain?.[1] || 1000
+    const metricMaxValue = scales.metricScale.domain?.[1] || 100
+    
+    // Calculate position ratio relative to axis maximum for THIS data point only
+    const costRatio = costValue / costMaxValue
+    const metricRatio = metricValue / metricMaxValue
+    
+    // For THIS specific point: if cost ratio is higher, cost label goes above
+    costShouldBeAbove = costRatio > metricRatio
+  }
+  
+  const labelY = costShouldBeAbove ? y - height - 8 : y + 8
   
   return (
     <g>
@@ -194,8 +233,16 @@ const RelativeCostLabel = (props: any) => {
   )
 }
 
-export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost Analysis" }: MonthlyViewsCostChartProps) {
-  const [selectedMetric, setSelectedMetric] = useState<MetricType>('views')
+export function MonthlyViewsCostChart({ 
+  data, 
+  title = "Monthly Metrics & Cost Analysis",
+  selectedMetric: propSelectedMetric,
+  onMetricChange,
+  notesMonthlyCount = {}
+}: MonthlyViewsCostChartProps) {
+  // Use shared state from props, fallback to default values
+  const selectedMetric = propSelectedMetric ?? 'views'
+  const setSelectedMetric = onMetricChange ?? (() => {})
   
   // Get current metric config
   const metricConfig = useMemo(() => {
@@ -232,13 +279,53 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
     return processMonthlyData(data)
   }, [data])
 
-  // Calculate average cost per month
+  // Calculate average cost per month from monthly aggregated data
   const avgCostPerMonth = useMemo(() => {
     if (!chartData || chartData.length === 0) return 0
     const totalCost = chartData.reduce((sum, item) => sum + item.cost, 0)
     const totalMonths = chartData.length
     return totalMonths > 0 ? totalCost / totalMonths : 0
   }, [chartData])
+
+  // Calculate average metric per month from monthly aggregated data
+  const avgMetricPerMonth = useMemo(() => {
+    if (!chartData || chartData.length === 0) return 0
+
+    // Calculate average from raw daily data, but convert to monthly scale
+    if (!data || data.length === 0) return 0
+
+    // First, group by month and calculate monthly totals from raw data
+    const monthlyTotals: { [key: string]: { metric: number, days: number } } = {}
+
+    data.forEach(item => {
+      const month = item.date.substring(0, 7) // YYYY-MM format
+      if (!monthlyTotals[month]) {
+        monthlyTotals[month] = { metric: 0, days: 0 }
+      }
+
+      let metricValue = 0
+      switch (metricConfig.dataKey) {
+        case 'views':
+          metricValue = item.clicks
+          break
+        case 'likes':
+          metricValue = item.likes
+          break
+        case 'followers':
+          metricValue = item.followers
+          break
+      }
+
+      monthlyTotals[month].metric += metricValue
+      monthlyTotals[month].days++
+    })
+
+    // Calculate average monthly total
+    const monthlyValues = Object.values(monthlyTotals).map(m => m.metric)
+    return monthlyValues.length > 0
+      ? monthlyValues.reduce((sum, val) => sum + val, 0) / monthlyValues.length
+      : 0
+  }, [data, chartData, metricConfig.dataKey])
 
   // Calculate dynamic scales for both axes
   const { metricScale, costScale } = useMemo(() => {
@@ -250,6 +337,7 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
     }
     
     const metricValues = chartData.map(d => d[metricConfig.dataKey as keyof MonthlyData] as number).filter(v => v > 0)
+    if (avgMetricPerMonth > 0) metricValues.push(avgMetricPerMonth)
     const minMetric = metricValues.length > 0 ? Math.min(...metricValues) : 0
     const maxMetric = metricValues.length > 0 ? Math.max(...metricValues) : 100
     
@@ -262,37 +350,76 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
       metricScale: calculateNiceScale(minMetric, maxMetric, 5),
       costScale: calculateNiceScale(minCost, maxCost, 5)
     }
-  }, [chartData, metricConfig.dataKey, avgCostPerMonth])
+  }, [chartData, metricConfig.dataKey, avgCostPerMonth, avgMetricPerMonth])
 
   // Format month display
   const formatMonth = (monthStr: string) => {
     const [year, month] = monthStr.split('-')
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    return `${monthNames[parseInt(month) - 1]} ${year.slice(2)}`
+    return `${monthNames[parseInt(month) - 1]} ${year}`
+  }
+
+  // Custom tick component for X-axis with Posts count
+  const CustomTick = (props: any) => {
+    const { x, y, payload } = props
+    const monthStr = payload.value // Format: "2024-09"
+
+    // Convert monthStr format "2024-09" to match notesMonthlyCount key format "Sep 2024"
+    const convertToNotesKey = (monthStr: string) => {
+      const [year, month] = monthStr.split('-')
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      return `${monthNames[parseInt(month) - 1]} ${year}`
+    }
+
+    const notesKey = convertToNotesKey(monthStr)
+    const postsCount = notesMonthlyCount && notesMonthlyCount[notesKey] ? notesMonthlyCount[notesKey] : 0
+    
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={16} textAnchor="middle" fill="#6B7280" fontSize="12">
+          {formatMonth(monthStr)}
+        </text>
+        <text x={0} y={0} dy={32} textAnchor="middle" fill="#6B7280" fontSize="11">
+          {postsCount} Posts
+        </text>
+      </g>
+    )
   }
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const dataPoint = chartData.find(d => d.month === label)
-      
+
       if (dataPoint) {
         const [year, month] = label.split('-')
-        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
                            'July', 'August', 'September', 'October', 'November', 'December']
         const formattedMonth = `${monthNames[parseInt(month) - 1]} ${year}`
-        
+
+        // Convert to notesMonthlyCount key format "Sep 2024"
+        const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const notesKey = `${monthNamesShort[parseInt(month) - 1]} ${year}`
+        const postsCount = notesMonthlyCount?.[notesKey] || 0
+
         return (
           <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-4 shadow-xl min-w-[200px]">
             <p className="font-bold text-gray-900 mb-3 border-b pb-2">{formattedMonth}</p>
-            
+
+            <div className="mb-2">
+              <p className="text-sm font-semibold mb-1" style={{ color: '#8B5CF6' }}>
+                📝 Posts
+              </p>
+              <p className="text-sm text-gray-700">{postsCount}</p>
+            </div>
+
             <div className="mb-2">
               <p className="text-sm font-semibold mb-1" style={{ color: metricConfig.color }}>
                 {metricConfig.label === 'Views' ? '👁️' : metricConfig.label === 'Likes' ? '❤️' : '👥'} {metricConfig.label}
               </p>
               <p className="text-sm text-gray-700">{dataPoint[metricConfig.dataKey as keyof MonthlyData].toLocaleString()}</p>
             </div>
-            
+
             <div>
               <p className="text-sm font-semibold mb-1" style={{ color: '#751FAE' }}>💰 Cost</p>
               <p className="text-sm text-gray-700">${dataPoint.cost.toFixed(2)}</p>
@@ -308,8 +435,8 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
     return (
       <Card className="bg-white/95 backdrop-blur-xl shadow-lg border border-gray-200/50">
         <CardHeader>
-          <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] bg-clip-text text-transparent font-montserrat">
-            📈 {title}
+          <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -326,8 +453,8 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
       <CardHeader>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] bg-clip-text text-transparent font-montserrat">
-              📈 Monthly {metricConfig.label} & Cost Trend
+            <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+              Monthly {metricConfig.label} & Cost Trend
             </CardTitle>
           </div>
           
@@ -377,11 +504,8 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
             >
               <XAxis 
                 dataKey="month" 
-                tick={{ fontSize: 12, fill: '#6B7280' }}
-                tickFormatter={formatMonth}
-                angle={-45}
-                textAnchor="end"
-                height={80}
+                tick={<CustomTick />}
+                height={100}
                 scale="point"
                 padding={{ left: 30, right: 30 }}
               />
@@ -419,32 +543,28 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
               <Tooltip content={<CustomTooltip />} />
               <Legend />
               
-              {/* Average Cost per Month Reference Line - Orange dashed line */}
+              {/* Average Cost per Month Reference Line - Purple dashed line */}
               {avgCostPerMonth > 0 && (
-                <ReferenceLine 
+                <ReferenceLine
                   yAxisId="cost"
-                  y={avgCostPerMonth} 
-                  stroke="#FF8C00" 
+                  y={avgCostPerMonth}
+                  stroke="#C4A5E7"
+                  strokeDasharray="8 4"
+                  strokeWidth={2}
+                />
+              )}
+
+              {/* Average Metric per Month Reference Line - lighter version of metric color */}
+              {avgMetricPerMonth > 0 && (
+                <ReferenceLine
+                  yAxisId="metric"
+                  y={avgMetricPerMonth}
+                  stroke={`${metricConfig.color}80`}
                   strokeDasharray="8 4"
                   strokeWidth={2}
                 />
               )}
               
-              {/* Invisible Line for Legend display only - placed last to appear last in legend */}
-              {avgCostPerMonth > 0 && (
-                <Line
-                  yAxisId="cost"
-                  type="monotone"
-                  dataKey={() => null}
-                  stroke="#FF8C00"
-                  strokeDasharray="8 4"
-                  strokeWidth={2}
-                  dot={false}
-                  name={`Average Cost per Month: $${avgCostPerMonth.toFixed(0)}`}
-                  connectNulls={false}
-                  legendType="line"
-                />
-              )}
               
               {/* Cost Line - Left axis */}
               <Line
@@ -454,7 +574,7 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
                 stroke="#751FAE"
                 strokeWidth={3}
                 dot={{ fill: '#751FAE', strokeWidth: 2, r: 4 }}
-                name="Cost ($)"
+                name={`Cost (Avg: $${avgCostPerMonth.toFixed(2)})`}
                 connectNulls={false}
               />
               
@@ -466,7 +586,7 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
                 stroke={metricConfig.color}
                 strokeWidth={3}
                 dot={{ fill: metricConfig.color, strokeWidth: 2, r: 4 }}
-                name={metricConfig.name}
+                name={`${metricConfig.name} (Avg: ${avgMetricPerMonth >= 1000 ? `${(avgMetricPerMonth/1000).toFixed(2)}K` : avgMetricPerMonth.toFixed(2)})`}
                 connectNulls={false}
               />
               
@@ -480,7 +600,7 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
                 connectNulls={false}
                 legendType="none"
               >
-                <LabelList content={RelativeCostLabel} position="top" />
+                <LabelList content={(props) => <RelativeCostLabel {...props} metricConfig={metricConfig} scales={{metricScale, costScale}} data={chartData} />} position="top" />
               </Line>
               
               <Line
@@ -492,7 +612,7 @@ export function MonthlyViewsCostChart({ data, title = "Monthly Metrics & Cost An
                 connectNulls={false}
                 legendType="none"
               >
-                <LabelList content={(props) => <RelativeMetricLabel {...props} color={metricConfig.color} />} position="top" />
+                <LabelList content={(props) => <RelativeMetricLabel {...props} config={metricConfig} scales={{metricScale, costScale}} data={chartData} color={metricConfig.color} />} position="top" />
               </Line>
             </LineChart>
           </ResponsiveContainer>

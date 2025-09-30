@@ -6,12 +6,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { LifeCarDailyData } from "@/lib/lifecar-data-processor"
 
+interface LifeCarNote {
+  发布时间: string
+  类型: string
+  名称: string
+  链接: string
+}
+
 interface ViewsCostDailyChartProps {
   data: LifeCarDailyData[]
   title?: string
   startDate?: string
   endDate?: string
   allData?: LifeCarDailyData[] // All unfiltered data for toggle functionality
+  selectedMetric?: MetricType // Shared metric state
+  onMetricChange?: (metric: MetricType) => void // Shared metric change handler
+  isFiltered?: boolean // Shared filter state
+  onFilterChange?: (filtered: boolean) => void // Shared filter change handler
+  selectedDates?: string[] // Selected dates for vertical lines
+  notesWeekdayCount?: {[key: string]: number} // Notes count by weekday
+  notesData?: LifeCarNote[] // Notes data for tooltip display
 }
 
 interface DailyData {
@@ -27,7 +41,11 @@ type MetricType = 'views' | 'likes' | 'followers'
 
 // Process data for daily metrics and cost
 function processDailyData(data: LifeCarDailyData[]): DailyData[] {
-  const sortedData = [...data].sort((a, b) => a.date.localeCompare(b.date))
+  const sortedData = [...data].sort((a, b) => {
+    const dateA = typeof a.date === 'string' ? a.date : String(a.date);
+    const dateB = typeof b.date === 'string' ? b.date : String(b.date);
+    return dateA.localeCompare(dateB);
+  })
   
   return sortedData.map(item => ({
     date: item.date,
@@ -134,40 +152,74 @@ function calculateNiceScale(minValue: number, maxValue: number, targetTicks: num
   }
 }
 
-// Label components with distance-based positioning
+// Label components with point-by-point positioning
 const RelativeMetricLabel = (props: any) => {
-  const { x, y, value, index, payload, viewBox, config, scales } = props
+  const { x, y, value, index, payload, viewBox, config, scales, data } = props
+  
+  // Try to get the data point - payload might be undefined, so try other props
+  const dataPoint = payload || (data && data[index])
+  
   if (!value || value === 0) return null
   
   const text = value >= 1000 ? `${(value/1000).toFixed(1)}K` : value.toString()
   const width = config?.dataKey === 'followers' ? 36 : 30
   const height = 14
   
-  // Default positioning fallback
-  let metricShouldBeAbove = y < 200
+  // Enhanced fallback positioning with multiple strategies
+  let metricShouldBeAbove = false
   
-  // Distance-based positioning if we have all required data
-  if (payload && scales?.costScale && scales?.metricScale && config) {
-    const costValue = payload.cost || 0
-    const metricValue = payload[config.dataKey] || 0
-    
-    // Get Y-axis maximum values
-    const costMaxValue = scales.costScale.domain?.[1] || 1000
-    const metricMaxValue = scales.metricScale.domain?.[1] || 100
-    
-    // Calculate distance from maximum as a ratio
-    // Smaller ratio = closer to top, larger ratio = farther from top
-    const costDistanceRatio = (costMaxValue - costValue) / costMaxValue
-    const metricDistanceRatio = (metricMaxValue - metricValue) / metricMaxValue
-    
-    // Distance ratio closer to 0 = closer to Y-axis top = label above
-    // Distance ratio closer to 1 = farther from Y-axis top = label below
-    metricShouldBeAbove = metricDistanceRatio < costDistanceRatio
+  try {
+    // Strategy 1: Use scales if available and valid
+    if (dataPoint && scales?.costScale && scales?.metricScale && config && 
+        scales.costScale.domain && scales.metricScale.domain &&
+        Array.isArray(scales.costScale.domain) && Array.isArray(scales.metricScale.domain)) {
+      
+      const costValue = dataPoint.cost || 0
+      const metricValue = dataPoint[config.dataKey] || 0
+      
+      // Get Y-axis maximum values with additional validation
+      const costMaxValue = scales.costScale.domain[1]
+      const metricMaxValue = scales.metricScale.domain[1]
+      
+      if (costMaxValue > 0 && metricMaxValue > 0) {
+        // Calculate position ratio relative to axis maximum for THIS data point only
+        const costRatio = costValue / costMaxValue
+        const metricRatio = metricValue / metricMaxValue
+        
+        // For THIS specific point: if metric ratio is higher, metric label goes above
+        metricShouldBeAbove = metricRatio > costRatio
+      } else {
+        throw new Error('Invalid scale domains')
+      }
+    } else {
+      throw new Error('Scales not available')
+    }
+  } catch (error) {
+    // Strategy 2: Fallback to data value comparison when scales are unavailable
+    if (dataPoint && config) {
+      const costValue = dataPoint.cost || 0
+      const metricValue = dataPoint[config.dataKey] || 0
+      
+      // Simple comparison: if metric value is higher than cost, place above
+      // This works because most metrics are in higher ranges than costs
+      if (config.dataKey === 'views') {
+        metricShouldBeAbove = metricValue > (costValue * 10) // Views are usually much higher
+      } else if (config.dataKey === 'likes') {
+        metricShouldBeAbove = metricValue > costValue // Likes can be higher than cost
+      } else { // followers
+        metricShouldBeAbove = metricValue > (costValue / 2) // Followers typically lower than cost
+      }
+    } else {
+      // Strategy 3: Position-based fallback (production-safe)
+      // Use y position relative to a reasonable chart height assumption
+      const assumedChartHeight = 400
+      metricShouldBeAbove = y > (assumedChartHeight * 0.6)
+    }
   }
   
   const labelY = metricShouldBeAbove ? y - height - 8 : y + 8
   
-  // Use the color directly from config
+  // Use the color directly from config with fallback
   const color = config?.color || '#3CBDE5'
   
   return (
@@ -198,33 +250,68 @@ const RelativeMetricLabel = (props: any) => {
 }
 
 const RelativeCostLabel = (props: any) => {
-  const { x, y, value, index, payload, viewBox, metricConfig, scales } = props
+  const { x, y, value, index, payload, viewBox, metricConfig, scales, data } = props
+  
+  // Try to get the data point - payload might be undefined, so try other props  
+  const dataPoint = payload || (data && data[index])
+  
   if (!value || value === 0) return null
   
   const text = `$${value >= 1000 ? `${(value/1000).toFixed(1)}K` : value.toFixed(0)}`
   const width = 36
   const height = 14
   
-  // Default positioning fallback
-  let costShouldBeAbove = y > 200
+  // Enhanced fallback positioning with multiple strategies
+  let costShouldBeAbove = false
   
-  // Distance-based positioning if we have all required data
-  if (payload && scales?.costScale && scales?.metricScale && metricConfig) {
-    const costValue = payload.cost || 0
-    const metricValue = payload[metricConfig.dataKey] || 0
-    
-    // Get Y-axis maximum values
-    const costMaxValue = scales.costScale.domain?.[1] || 1000
-    const metricMaxValue = scales.metricScale.domain?.[1] || 100
-    
-    // Calculate distance from maximum as a ratio
-    // Smaller ratio = closer to top, larger ratio = farther from top
-    const costDistanceRatio = (costMaxValue - costValue) / costMaxValue
-    const metricDistanceRatio = (metricMaxValue - metricValue) / metricMaxValue
-    
-    // Distance ratio closer to 0 = closer to Y-axis top = label above
-    // Distance ratio closer to 1 = farther from Y-axis top = label below
-    costShouldBeAbove = costDistanceRatio > metricDistanceRatio
+  try {
+    // Strategy 1: Use scales if available and valid
+    if (dataPoint && scales?.costScale && scales?.metricScale && metricConfig &&
+        scales.costScale.domain && scales.metricScale.domain &&
+        Array.isArray(scales.costScale.domain) && Array.isArray(scales.metricScale.domain)) {
+      
+      const costValue = dataPoint.cost || 0
+      const metricValue = dataPoint[metricConfig.dataKey] || 0
+      
+      // Get Y-axis maximum values with additional validation
+      const costMaxValue = scales.costScale.domain[1]
+      const metricMaxValue = scales.metricScale.domain[1]
+      
+      if (costMaxValue > 0 && metricMaxValue > 0) {
+        // Calculate position ratio relative to axis maximum for THIS data point only
+        const costRatio = costValue / costMaxValue
+        const metricRatio = metricValue / metricMaxValue
+        
+        // For THIS specific point: if cost ratio is higher, cost label goes above
+        costShouldBeAbove = costRatio > metricRatio
+      } else {
+        throw new Error('Invalid scale domains')
+      }
+    } else {
+      throw new Error('Scales not available')
+    }
+  } catch (error) {
+    // Strategy 2: Fallback to data value comparison when scales are unavailable
+    if (dataPoint && metricConfig) {
+      const costValue = dataPoint.cost || 0
+      const metricValue = dataPoint[metricConfig.dataKey] || 0
+      
+      // Simple comparison: if cost value is higher than metric, place above
+      // This is the inverse of the metric label logic
+      if (metricConfig.dataKey === 'views') {
+        costShouldBeAbove = (costValue * 10) > metricValue // Reverse of views logic
+      } else if (metricConfig.dataKey === 'likes') {
+        costShouldBeAbove = costValue > metricValue // Reverse of likes logic
+      } else { // followers
+        costShouldBeAbove = (costValue / 2) > metricValue // Reverse of followers logic
+      }
+    } else {
+      // Strategy 3: Position-based fallback (production-safe)
+      // Use y position relative to a reasonable chart height assumption
+      // For cost, use opposite logic from metric labels
+      const assumedChartHeight = 400
+      costShouldBeAbove = y < (assumedChartHeight * 0.4)
+    }
   }
   
   const labelY = costShouldBeAbove ? y - height - 8 : y + 8
@@ -256,10 +343,60 @@ const RelativeCostLabel = (props: any) => {
   )
 }
 
-export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analysis", startDate, endDate, allData }: ViewsCostDailyChartProps) {
-  // State for filter toggle and metric selection
-  const [isFiltered, setIsFiltered] = useState(true)
-  const [selectedMetric, setSelectedMetric] = useState<MetricType>('views')
+export function ViewsCostDailyChart({
+  data,
+  title = "Daily Metrics & Cost Analysis",
+  startDate,
+  endDate,
+  allData,
+  selectedMetric: propSelectedMetric,
+  onMetricChange,
+  isFiltered: propIsFiltered,
+  onFilterChange,
+  selectedDates = [],
+  notesWeekdayCount = {},
+  notesData = []
+}: ViewsCostDailyChartProps) {
+  // Get posts for a specific date (only if the date is selected)
+  const getPostsForDate = (dateStr: string): LifeCarNote[] => {
+    if (!notesData || notesData.length === 0) {
+      return []
+    }
+
+    // Extract date part from dateStr (YYYY-MM-DD format)
+    const targetDate = dateStr.split(' ')[0]
+
+    // Check if this date is selected in the Posts modal
+    const isDateSelected = selectedDates.includes(targetDate)
+
+    if (!isDateSelected) {
+      return []
+    }
+
+    // Find all posts for this date
+    return notesData.filter(note => {
+      if (!note.发布时间) return false
+      const noteDate = note.发布时间.split(' ')[0] // Extract date part
+      return noteDate === targetDate
+    })
+  }
+
+  // Use shared state from props, fallback to default values
+  const isFiltered = propIsFiltered ?? true
+  const selectedMetric = propSelectedMetric ?? 'views'
+  const setIsFiltered = onFilterChange ?? (() => {})
+  const setSelectedMetric = onMetricChange ?? (() => {})
+
+  // Handle metric selection - simple synchronization
+  const handleMetricSelect = (metric: MetricType) => {
+    setSelectedMetric(metric)
+  }
+
+  // Handle filter toggle - simple synchronization
+  const handleFilterToggle = () => {
+    const newFilterState = !isFiltered
+    setIsFiltered(newFilterState)
+  }
   
   // Get current metric config
   const metricConfig = useMemo(() => {
@@ -317,15 +454,43 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
     }
   }, [activeData, isSevenDayRange, isFiltered])
 
-  // Calculate average cost per day from currently active data (changes with filter toggle)
+  // Calculate average cost per day directly from original raw data (changes with filter toggle)
   const avgCostPerDay = useMemo(() => {
     if (!activeData || activeData.length === 0) return 0
     const totalCost = activeData.reduce((sum, item) => sum + item.spend, 0)
     const totalDays = activeData.length
     const avgDaily = totalDays > 0 ? totalCost / totalDays : 0
-    
+
+    // Return raw average (will be formatted with 2 decimal places in legend)
     return avgDaily
   }, [activeData, isFiltered])
+
+  // Calculate average metric per day directly from original raw data (without rounding)
+  const avgMetricPerDay = useMemo(() => {
+    if (!activeData || activeData.length === 0) return 0
+    let totalMetric = 0
+
+    // Map the dataKey to the correct field in LifeCarDailyData and calculate from raw data
+    switch (metricConfig.dataKey) {
+      case 'views':
+        totalMetric = activeData.reduce((sum, item) => sum + item.clicks, 0)
+        break
+      case 'likes':
+        totalMetric = activeData.reduce((sum, item) => sum + item.likes, 0)
+        break
+      case 'followers':
+        totalMetric = activeData.reduce((sum, item) => sum + item.followers, 0)
+        break
+      default:
+        totalMetric = 0
+    }
+
+    const totalDays = activeData.length
+    const avgDaily = totalDays > 0 ? totalMetric / totalDays : 0
+
+    // Return raw average (will be formatted with 2 decimal places in legend)
+    return avgDaily
+  }, [activeData, isFiltered, metricConfig.dataKey])
 
 
   // Calculate dynamic scales for both axes
@@ -337,11 +502,12 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
       }
     }
     
-    // Find min and max for selected metric
+    // Find min and max for selected metric - include avgMetricPerDay in the range calculation
     const metricValues = chartData.map(d => d[metricConfig.dataKey]).filter(v => v > 0)
+    if (avgMetricPerDay > 0) metricValues.push(avgMetricPerDay)
     const minMetric = metricValues.length > 0 ? Math.min(...metricValues) : 0
     const maxMetric = metricValues.length > 0 ? Math.max(...metricValues) : 100
-    
+
     // Find min and max for cost - include avgCostPerDay in the range calculation
     const costValues = chartData.map(d => d.cost).filter(v => v > 0)
     if (avgCostPerDay > 0) costValues.push(avgCostPerDay)
@@ -352,7 +518,7 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
       metricScale: calculateNiceScale(minMetric, maxMetric, 5),
       costScale: calculateNiceScale(minCost, maxCost, 5)
     }
-  }, [chartData, metricConfig.dataKey, avgCostPerDay])
+  }, [chartData, metricConfig.dataKey, avgCostPerDay, avgMetricPerDay])
 
   // Format date display
   const formatDate = (dateStr: string) => {
@@ -368,31 +534,81 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
     return dateStr
   }
 
+  // Custom tick component for multi-line display
+  const CustomTick = (props: any) => {
+    const { x, y, payload } = props
+    const dateStr = payload.value
+    
+    // Show Posts count when: (non-7-day range) OR (using "All data" mode in chart)
+    if (!isSevenDayRange || !isFiltered) {
+      const postsCount = notesWeekdayCount && notesWeekdayCount[dateStr] ? notesWeekdayCount[dateStr] : 0
+      return (
+        <g transform={`translate(${x},${y})`}>
+          <text x={0} y={0} dy={16} textAnchor="middle" fill="#6B7280" fontSize="12">
+            {dateStr}
+          </text>
+          <text x={0} y={0} dy={32} textAnchor="middle" fill="#6B7280" fontSize="11">
+            {postsCount} Posts
+          </text>
+        </g>
+      )
+    }
+    
+    // For 7-day range, use regular formatting
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={16} textAnchor="middle" fill="#6B7280" fontSize="12">
+          {formatDate(dateStr)}
+        </text>
+      </g>
+    )
+  }
+
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const dataPoint = chartData.find(d => d.date === label)
-      
+
       if (dataPoint) {
         let formattedDate: string
-        
+
         if (isSevenDayRange && isFiltered) {
           // For 7-day range with filter, show full date
-          formattedDate = new Date(label).toLocaleDateString('en-US', { 
-            weekday: 'short', 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric' 
+          formattedDate = new Date(label).toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
           })
         } else {
           // For weekday grouping, show weekday and indicate it's an average
           formattedDate = `${label} (Average)`
         }
-        
+
+        // Get posts for this date
+        const postsForDate = getPostsForDate(label)
+
         return (
-          <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-4 shadow-xl min-w-[200px]">
+          <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-4 shadow-xl min-w-[240px] max-w-[400px]">
             <p className="font-bold text-gray-900 mb-3 border-b pb-2">{formattedDate}</p>
-            
+
+            {/* Posts Section - Show only if there are posts for this date */}
+            {postsForDate.length > 0 && (
+              <div className="mb-3">
+                <p className="text-sm font-semibold mb-2 text-purple-700">
+                  📝 Posts ({postsForDate.length})
+                </p>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {postsForDate.map((post, index) => (
+                    <div key={index} className="text-xs p-2 bg-purple-50 rounded border-l-2 border-purple-300">
+                      <div className="font-medium text-purple-800 line-clamp-2">{post.名称}</div>
+                      <div className="text-purple-600 text-xs mt-1">{post.类型}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Selected Metric Section */}
             <div className="mb-2">
               <p className="text-sm font-semibold mb-1" style={{ color: metricConfig.color }}>
@@ -400,7 +616,7 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
               </p>
               <p className="text-sm text-gray-700">{dataPoint[metricConfig.dataKey].toLocaleString()}</p>
             </div>
-            
+
             {/* Cost Section */}
             <div>
               <p className="text-sm font-semibold mb-1" style={{ color: '#751FAE' }}>💰 Cost</p>
@@ -417,8 +633,8 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
     return (
       <Card className="bg-white/95 backdrop-blur-xl shadow-lg border border-gray-200/50">
         <CardHeader>
-          <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] bg-clip-text text-transparent font-montserrat">
-            📈 {title}
+          <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -435,8 +651,8 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
       <CardHeader>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] bg-clip-text text-transparent font-montserrat">
-              📈 Daily {metricConfig.label} & Cost Trend {(!isSevenDayRange || !isFiltered) && "(Weekday Averages)"}
+            <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+              Daily {metricConfig.label} & Cost Trend {(!isSevenDayRange || !isFiltered) && "(Weekday Averages)"}
             </CardTitle>
           </div>
           
@@ -446,7 +662,7 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
               <Button
                 variant={selectedMetric === 'views' ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedMetric('views')}
+                onClick={() => handleMetricSelect('views')}
                 className={selectedMetric === 'views' 
                   ? 'bg-[#3CBDE5] hover:bg-[#2563EB] text-white border-0' 
                   : 'border-[#3CBDE5] text-[#3CBDE5] hover:bg-[#3CBDE5] hover:text-white'
@@ -457,7 +673,7 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
               <Button
                 variant={selectedMetric === 'likes' ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedMetric('likes')}
+                onClick={() => handleMetricSelect('likes')}
                 className={selectedMetric === 'likes' 
                   ? 'bg-[#EF3C99] hover:bg-[#E91E63] text-white border-0' 
                   : 'border-[#EF3C99] text-[#EF3C99] hover:bg-[#EF3C99] hover:text-white'
@@ -468,7 +684,7 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
               <Button
                 variant={selectedMetric === 'followers' ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedMetric('followers')}
+                onClick={() => handleMetricSelect('followers')}
                 className={selectedMetric === 'followers' 
                   ? 'bg-[#10B981] hover:bg-[#059669] text-white border-0' 
                   : 'border-[#10B981] text-[#10B981] hover:bg-[#10B981] hover:text-white'
@@ -482,7 +698,7 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
             <Button
               variant={isFiltered ? "default" : "outline"}
               size="sm"
-              onClick={() => setIsFiltered(!isFiltered)}
+              onClick={handleFilterToggle}
               className={isFiltered 
                 ? 'bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] hover:from-[#6B1F9A] hover:to-[#7C3AED] text-white border-0' 
                 : 'border-[#751FAE] text-[#751FAE] hover:bg-[#751FAE] hover:text-white'
@@ -502,11 +718,8 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
             >
               <XAxis 
                 dataKey="date" 
-                tick={{ fontSize: 12, fill: '#6B7280' }}
-                tickFormatter={formatDate}
-                angle={-45}
-                textAnchor="end"
-                height={80}
+                tick={<CustomTick />}
+                height={100}
                 scale="point"
                 padding={{ left: 30, right: 30 }}
               />
@@ -544,33 +757,30 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
               <Tooltip content={<CustomTooltip />} />
               <Legend />
               
-              {/* Average Cost per Day Reference Line - Orange dashed line */}
+              {/* Average Cost per Day Reference Line - Purple dashed line */}
               {avgCostPerDay > 0 && (
-                <ReferenceLine 
+                <ReferenceLine
                   key={`avg-cost-${avgCostPerDay}-${isFiltered}`}
                   yAxisId="cost"
-                  y={avgCostPerDay} 
-                  stroke="#FF8C00" 
+                  y={avgCostPerDay}
+                  stroke="#C4A5E7"
+                  strokeDasharray="8 4"
+                  strokeWidth={2}
+                />
+              )}
+
+              {/* Average Metric per Day Reference Line - lighter version of metric color */}
+              {avgMetricPerDay > 0 && (
+                <ReferenceLine
+                  key={`avg-metric-${avgMetricPerDay}-${isFiltered}`}
+                  yAxisId="metric"
+                  y={avgMetricPerDay}
+                  stroke={`${metricConfig.color}80`}
                   strokeDasharray="8 4"
                   strokeWidth={2}
                 />
               )}
               
-              {/* Invisible Line for Legend display only - placed last to appear last in legend */}
-              {avgCostPerDay > 0 && (
-                <Line
-                  yAxisId="cost"
-                  type="monotone"
-                  dataKey={() => null}
-                  stroke="#FF8C00"
-                  strokeDasharray="8 4"
-                  strokeWidth={2}
-                  dot={false}
-                  name={`Average Cost per Day: $${avgCostPerDay.toFixed(0)}`}
-                  connectNulls={false}
-                  legendType="line"
-                />
-              )}
               
               {/* Cost Line - Left axis */}
               <Line
@@ -579,8 +789,36 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
                 dataKey="cost"
                 stroke="#751FAE"
                 strokeWidth={3}
-                dot={{ fill: '#751FAE', strokeWidth: 2, r: 4 }}
-                name="Cost ($)"
+                dot={(props: any) => {
+                  const isSelected = selectedDates.length > 0 && props.payload && selectedDates.includes(props.payload.date)
+                  
+                  return (
+                    <g>
+                      {/* Normal dot - same format as metric line */}
+                      <circle
+                        cx={props.cx}
+                        cy={props.cy}
+                        r={4}
+                        fill="#751FAE"
+                        strokeWidth={2}
+                      />
+                      {/* Vertical line for selected dates */}
+                      {isSelected && (
+                        <line
+                          x1={props.cx}
+                          y1={30}
+                          x2={props.cx}
+                          y2={280}
+                          stroke="#6B7280"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          opacity={0.8}
+                        />
+                      )}
+                    </g>
+                  )
+                }}
+                name={`Cost (Avg: $${avgCostPerDay.toFixed(2)})`}
                 connectNulls={false}
               />
               
@@ -592,7 +830,7 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
                 stroke={metricConfig.color}
                 strokeWidth={3}
                 dot={{ fill: metricConfig.color, strokeWidth: 2, r: 4 }}
-                name={metricConfig.name}
+                name={`${metricConfig.name} (Avg: ${avgMetricPerDay >= 1000 ? `${(avgMetricPerDay/1000).toFixed(2)}K` : avgMetricPerDay.toFixed(2)})`}
                 connectNulls={false}
               />
               
@@ -606,7 +844,7 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
                 connectNulls={false}
                 legendType="none"
               >
-                <LabelList content={(props) => <RelativeCostLabel {...props} metricConfig={metricConfig} scales={{metricScale, costScale}} />} position="top" />
+                <LabelList content={(props) => <RelativeCostLabel {...props} metricConfig={metricConfig} scales={{metricScale, costScale}} data={chartData} />} position="top" />
               </Line>
               
               <Line
@@ -618,7 +856,7 @@ export function ViewsCostDailyChart({ data, title = "Daily Metrics & Cost Analys
                 connectNulls={false}
                 legendType="none"
               >
-                <LabelList content={(props) => <RelativeMetricLabel {...props} config={metricConfig} scales={{metricScale, costScale}} />} position="top" />
+                <LabelList content={(props) => <RelativeMetricLabel {...props} config={metricConfig} scales={{metricScale, costScale}} data={chartData} />} position="top" />
               </Line>
             </LineChart>
           </ResponsiveContainer>

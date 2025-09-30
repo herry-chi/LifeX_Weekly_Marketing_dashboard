@@ -16,12 +16,14 @@ interface WeeklyMetrics {
   totalCost: number
   totalImpressions: number
   totalClicks: number
-  totalInteraction: number
+  totalLikes: number
+  totalNewFollowers: number
   totalPrivateMessages: number
   costChange?: number
   impressionsChange?: number
   clicksChange?: number
-  interactionChange?: number
+  likesChange?: number
+  newFollowersChange?: number
   privateMessagesChange?: number
 }
 
@@ -34,14 +36,22 @@ export function LifeCarWeeklyAnalysis({ data, title = "Weekly Performance Detail
     const weekMap = new Map<string, LifeCarDailyData[]>()
     
     data.forEach(item => {
-      const date = new Date(item.date)
+      // Parse date in local timezone to avoid timezone offset issues
+      const [year, month, day] = item.date.split('-').map(Number)
+      const date = new Date(year, month - 1, day, 12, 0, 0, 0) // Set to noon
       const weekStart = new Date(date)
-      const day = weekStart.getDay()
-      const diff = weekStart.getDate() - day + (day === 0 ? -6 : 1)
-      weekStart.setDate(diff)
+      const dayOfWeek = weekStart.getDay()
+      // For Monday-Sunday weeks where Sunday is the LAST day of the week:
+      // Sunday (0) should be grouped with the Monday 6 days BEFORE it
+      // Monday (1) stays at Monday  
+      // Tuesday (2) goes back 1 day to Monday
+      // etc.
+      const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1  // Sunday goes back 6 days to find its Monday
+      weekStart.setDate(weekStart.getDate() - daysFromMonday)
       weekStart.setHours(0, 0, 0, 0)
       
-      const weekKey = weekStart.toISOString().split('T')[0]
+      // Format date in local timezone
+      const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`
       
       if (!weekMap.has(weekKey)) {
         weekMap.set(weekKey, [])
@@ -64,7 +74,8 @@ export function LifeCarWeeklyAnalysis({ data, title = "Weekly Performance Detail
         totalCost: weekData.reduce((sum, d) => sum + (d.spend || 0), 0),
         totalImpressions: weekData.reduce((sum, d) => sum + (d.impressions || 0), 0),
         totalClicks: weekData.reduce((sum, d) => sum + (d.clicks || 0), 0),
-        totalInteraction: weekData.reduce((sum, d) => sum + (d.interactions || 0), 0),
+        totalLikes: weekData.reduce((sum, d) => sum + (d.likes || 0), 0),
+        totalNewFollowers: weekData.reduce((sum, d) => sum + (d.followers || 0), 0),
         totalPrivateMessages: weekData.reduce((sum, d) => sum + ((d.multiConversion1 || 0) + (d.multiConversion2 || 0)), 0)
 
       }
@@ -93,8 +104,11 @@ export function LifeCarWeeklyAnalysis({ data, title = "Weekly Performance Detail
       if (previous.totalClicks > 0) {
         current.clicksChange = ((current.totalClicks - previous.totalClicks) / previous.totalClicks) * 100
       }
-      if (previous.totalInteraction > 0) {
-        current.interactionChange = ((current.totalInteraction - previous.totalInteraction) / previous.totalInteraction) * 100
+      if (previous.totalLikes > 0) {
+        current.likesChange = ((current.totalLikes - previous.totalLikes) / previous.totalLikes) * 100
+      }
+      if (previous.totalNewFollowers > 0) {
+        current.newFollowersChange = ((current.totalNewFollowers - previous.totalNewFollowers) / previous.totalNewFollowers) * 100
       }
       if (previous.totalPrivateMessages > 0) {
         current.privateMessagesChange = ((current.totalPrivateMessages - previous.totalPrivateMessages) / previous.totalPrivateMessages) * 100
@@ -175,9 +189,6 @@ export function LifeCarWeeklyAnalysis({ data, title = "Weekly Performance Detail
         {weeklyMetrics.map((weekData, index) => (
           <div key={index} className="bg-white/95 backdrop-blur-xl rounded-lg shadow-lg border border-gray-200/50 p-4">
             <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200">
-              <div className="p-1.5 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg">
-                <span className="text-purple-600 text-sm">📊</span>
-              </div>
               <div className="flex-1">
                 <h4 className="text-2xl font-black text-[#751FAE] font-montserrat">
                   Week of {formatWeekEndDate(weekData.weekEndDate)}
@@ -215,15 +226,27 @@ export function LifeCarWeeklyAnalysis({ data, title = "Weekly Performance Detail
                 </div>
               </div>
 
-              {/* Interaction */}
+              {/* Likes */}
               <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-md border border-gray-200/60 p-3 hover:shadow-lg transition-all duration-200 relative">
                 <svg className="absolute top-2 right-2 w-4 h-4 text-[#751FAE]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                 </svg>
-                <div className="text-xs font-semibold text-[#751FAE] font-montserrat mb-2">Interaction</div>
+                <div className="text-xs font-semibold text-[#751FAE] font-montserrat mb-2">Likes</div>
                 <div className="flex items-center gap-2">
-                  <div className="text-2xl font-semibold text-[#FF1493] font-montserrat">{formatNumber(weekData.totalInteraction)}</div>
-                  {renderChangePercent(weekData.interactionChange, 'positive')}
+                  <div className="text-2xl font-semibold text-[#FF1493] font-montserrat">{formatNumber(weekData.totalLikes)}</div>
+                  {renderChangePercent(weekData.likesChange, 'positive')}
+                </div>
+              </div>
+
+              {/* New Followers */}
+              <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-md border border-gray-200/60 p-3 hover:shadow-lg transition-all duration-200 relative">
+                <svg className="absolute top-2 right-2 w-4 h-4 text-[#751FAE]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+                <div className="text-xs font-semibold text-[#751FAE] font-montserrat mb-2">New Followers</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-2xl font-semibold text-[#FF1493] font-montserrat">{formatNumber(weekData.totalNewFollowers)}</div>
+                  {renderChangePercent(weekData.newFollowersChange, 'positive')}
                 </div>
               </div>
 
