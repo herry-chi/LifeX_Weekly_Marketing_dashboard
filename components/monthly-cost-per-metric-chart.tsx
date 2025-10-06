@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useMemo, useState } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, ReferenceLine } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { LifeCarDailyData } from "@/lib/lifecar-data-processor"
@@ -9,6 +9,9 @@ import { LifeCarDailyData } from "@/lib/lifecar-data-processor"
 interface MonthlyCostPerMetricChartProps {
   data: LifeCarDailyData[]
   title?: string
+  selectedMetric?: 'views' | 'likes' | 'followers'
+  onMetricChange?: (metric: 'views' | 'likes' | 'followers') => void
+  notesMonthlyCount?: {[key: string]: number}
 }
 
 interface MonthlyData {
@@ -140,8 +143,36 @@ const CostMetricLabel = (props: any) => {
   )
 }
 
-export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis" }: MonthlyCostPerMetricChartProps) {
-  const [selectedMetric, setSelectedMetric] = useState<MetricType>('costPerFollower')
+export function MonthlyCostPerMetricChart({ 
+  data, 
+  title = "Monthly Cost Analysis",
+  selectedMetric: propSelectedMetric,
+  onMetricChange,
+  notesMonthlyCount = {}
+}: MonthlyCostPerMetricChartProps) {
+  // Map shared metric from MonthlyViewsCostChart to local metric type
+  const selectedMetric = useMemo(() => {
+    if (propSelectedMetric) {
+      switch (propSelectedMetric) {
+        case 'views': return 'costPerClick' as MetricType
+        case 'likes': return 'costPerLike' as MetricType
+        case 'followers': return 'costPerFollower' as MetricType
+        default: return 'costPerFollower'
+      }
+    }
+    return 'costPerFollower'
+  }, [propSelectedMetric])
+  
+  // Handle metric selection - map back to shared state format
+  const handleMetricSelect = (metric: MetricType) => {
+    if (onMetricChange) {
+      switch (metric) {
+        case 'costPerClick': onMetricChange('views'); break
+        case 'costPerLike': onMetricChange('likes'); break
+        case 'costPerFollower': onMetricChange('followers'); break
+      }
+    }
+  }
   
   // Get metric display info
   const getMetricInfo = (metric: MetricType) => {
@@ -157,47 +188,120 @@ export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis
   
   const currentMetricInfo = getMetricInfo(selectedMetric)
 
+
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return []
     return processMonthlyData(data)
   }, [data])
 
-  // Calculate dynamic scale for selected metric
-  const metricScale = useMemo(() => {
-    if (!chartData || chartData.length === 0) {
-      return { domain: [0, 1], ticks: [0, 0.25, 0.5, 0.75, 1] }
+  // Calculate dynamic scale and average directly from raw data
+  const { metricScale, average } = useMemo(() => {
+    if (!data || data.length === 0) {
+      return {
+        metricScale: { domain: [0, 1], ticks: [0, 0.25, 0.5, 0.75, 1] },
+        average: 0
+      }
     }
-    
+
+    // Calculate average as SUM(Cost)/SUM(Metric) from all data
+    const totalCost = data.reduce((sum, item) => sum + item.spend, 0)
+    let totalMetric = 0
+
+    switch (selectedMetric) {
+      case 'costPerClick':
+        totalMetric = data.reduce((sum, item) => sum + item.clicks, 0)
+        break
+      case 'costPerLike':
+        totalMetric = data.reduce((sum, item) => sum + item.likes, 0)
+        break
+      case 'costPerFollower':
+        totalMetric = data.reduce((sum, item) => sum + item.followers, 0)
+        break
+    }
+
+    const average = totalMetric > 0 ? totalCost / totalMetric : 0
+
+    // For scale calculation, still use processed chartData but include raw average
+    if (!chartData || chartData.length === 0) {
+      return {
+        metricScale: { domain: [0, Math.max(1, average * 1.2)], ticks: [0, 0.25, 0.5, 0.75, 1] },
+        average
+      }
+    }
+
     const metricValues = chartData.map(d => d[selectedMetric]).filter(v => v > 0)
+    if (average > 0) metricValues.push(average)
     const minMetric = metricValues.length > 0 ? Math.min(...metricValues) : 0
     const maxMetric = metricValues.length > 0 ? Math.max(...metricValues) : 1
-    
-    return calculateNiceScale(minMetric, maxMetric, 5)
-  }, [chartData, selectedMetric])
+
+    return {
+      metricScale: calculateNiceScale(minMetric, maxMetric, 5),
+      average
+    }
+  }, [data, chartData, selectedMetric])
 
   // Format month display
   const formatMonth = (monthStr: string) => {
     const [year, month] = monthStr.split('-')
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    return `${monthNames[parseInt(month) - 1]} ${year.slice(2)}`
+    return `${monthNames[parseInt(month) - 1]} ${year}`
+  }
+
+  // Custom tick component for X-axis with Posts count
+  const CustomTick = (props: any) => {
+    const { x, y, payload } = props
+    const monthStr = payload.value // Format: "2024-09"
+
+    // Convert monthStr format "2024-09" to match notesMonthlyCount key format "Sep 2024"
+    const convertToNotesKey = (monthStr: string) => {
+      const [year, month] = monthStr.split('-')
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      return `${monthNames[parseInt(month) - 1]} ${year}`
+    }
+
+    const notesKey = convertToNotesKey(monthStr)
+    const postsCount = notesMonthlyCount && notesMonthlyCount[notesKey] ? notesMonthlyCount[notesKey] : 0
+    
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={16} textAnchor="middle" fill="#6B7280" fontSize="12">
+          {formatMonth(monthStr)}
+        </text>
+        <text x={0} y={0} dy={32} textAnchor="middle" fill="#6B7280" fontSize="11">
+          {postsCount} Posts
+        </text>
+      </g>
+    )
   }
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const dataPoint = chartData.find(d => d.month === label)
-      
+
       if (dataPoint) {
         const [year, month] = label.split('-')
-        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
                            'July', 'August', 'September', 'October', 'November', 'December']
         const formattedMonth = `${monthNames[parseInt(month) - 1]} ${year}`
         const value = dataPoint[selectedMetric]
-        
+
+        // Convert to notesMonthlyCount key format "Sep 2024"
+        const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const notesKey = `${monthNamesShort[parseInt(month) - 1]} ${year}`
+        const postsCount = notesMonthlyCount?.[notesKey] || 0
+
         return (
           <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-4 shadow-xl min-w-[200px]">
             <p className="font-bold text-gray-900 mb-3 border-b pb-2">{formattedMonth}</p>
-            
+
+            <div className="mb-2">
+              <p className="text-sm font-semibold mb-1" style={{ color: '#8B5CF6' }}>
+                📝 Posts
+              </p>
+              <p className="text-sm text-gray-700">{postsCount}</p>
+            </div>
+
             <div>
               <p className="text-sm font-semibold mb-1" style={{ color: currentMetricInfo.color }}>
                 💰 {currentMetricInfo.label}
@@ -215,8 +319,8 @@ export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis
     return (
       <Card className="bg-white/95 backdrop-blur-xl shadow-lg border border-gray-200/50">
         <CardHeader>
-          <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] bg-clip-text text-transparent font-montserrat">
-            📊 {title}
+          <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -233,8 +337,8 @@ export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis
       <CardHeader>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#8B5CF6] bg-clip-text text-transparent font-montserrat">
-              📊 Monthly {currentMetricInfo.label}
+            <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+              Monthly {currentMetricInfo.label}
             </CardTitle>
           </div>
           
@@ -243,7 +347,7 @@ export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis
             <Button
               variant={selectedMetric === 'costPerClick' ? "default" : "outline"}
               size="sm"
-              onClick={() => setSelectedMetric('costPerClick')}
+              onClick={() => handleMetricSelect('costPerClick')}
               className={selectedMetric === 'costPerClick' 
                 ? 'bg-[#3CBDE5] hover:bg-[#2563EB] text-white border-0' 
                 : 'border-[#3CBDE5] text-[#3CBDE5] hover:bg-[#3CBDE5] hover:text-white'
@@ -254,7 +358,7 @@ export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis
             <Button
               variant={selectedMetric === 'costPerLike' ? "default" : "outline"}
               size="sm"
-              onClick={() => setSelectedMetric('costPerLike')}
+              onClick={() => handleMetricSelect('costPerLike')}
               className={selectedMetric === 'costPerLike' 
                 ? 'bg-[#EF3C99] hover:bg-[#E91E63] text-white border-0' 
                 : 'border-[#EF3C99] text-[#EF3C99] hover:bg-[#EF3C99] hover:text-white'
@@ -265,7 +369,7 @@ export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis
             <Button
               variant={selectedMetric === 'costPerFollower' ? "default" : "outline"}
               size="sm"
-              onClick={() => setSelectedMetric('costPerFollower')}
+              onClick={() => handleMetricSelect('costPerFollower')}
               className={selectedMetric === 'costPerFollower' 
                 ? 'bg-[#10B981] hover:bg-[#059669] text-white border-0' 
                 : 'border-[#10B981] text-[#10B981] hover:bg-[#10B981] hover:text-white'
@@ -285,11 +389,10 @@ export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis
             >
               <XAxis 
                 dataKey="month" 
-                tick={{ fontSize: 12, fill: '#6B7280' }}
-                tickFormatter={formatMonth}
-                angle={-45}
-                textAnchor="end"
-                height={80}
+                tick={<CustomTick />}
+                height={100}
+                scale="point"
+                padding={{ left: 30, right: 30 }}
               />
               
               {/* Left Y-axis - Selected Metric */}
@@ -307,6 +410,16 @@ export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis
               
               <Tooltip content={<CustomTooltip />} />
               <Legend />
+
+              {/* Average Reference Line */}
+              {average > 0 && (
+                <ReferenceLine
+                  y={average}
+                  stroke={`${currentMetricInfo.color}80`}
+                  strokeWidth={2}
+                  strokeDasharray="8 8"
+                />
+              )}
               
               {/* Selected Metric Line */}
               <Line
@@ -315,7 +428,7 @@ export function MonthlyCostPerMetricChart({ data, title = "Monthly Cost Analysis
                 stroke={currentMetricInfo.color}
                 strokeWidth={3}
                 dot={{ fill: currentMetricInfo.color, strokeWidth: 2, r: 4 }}
-                name={`${currentMetricInfo.label} ($)`}
+                name={`${currentMetricInfo.label} (Avg: $${average.toFixed(2)})`}
                 connectNulls={false}
               />
               

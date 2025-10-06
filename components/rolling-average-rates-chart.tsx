@@ -11,14 +11,27 @@ interface ChartData {
   avgInteractionRate: number
 }
 
-export function RollingAverageRatesChart() {
+interface RollingAverageRatesChartProps {
+  csvContent?: string // Optional CSV content passed from parent
+}
+
+export function RollingAverageRatesChart({ csvContent }: RollingAverageRatesChartProps) {
   const [chartData, setChartData] = useState<ChartData[]>([])
 
   useEffect(() => {
-    // 读取 CSV 文件
-    fetch('/database_lifecar/lifecar-data.csv')
-      .then(res => res.text())
-      .then(csvText => {
+    // If CSV content is provided, use it directly
+    if (csvContent) {
+      processCSVData(csvContent)
+    } else {
+      // Otherwise try to fetch from static file (for development)
+      fetch('/database_lifecar/lifecar-data.csv')
+        .then(res => res.text())
+        .then(csvText => processCSVData(csvText))
+        .catch(err => console.error('Failed to load data:', err))
+    }
+  }, [csvContent])
+
+  const processCSVData = (csvText: string) => {
         // 使用现有的解析函数
         const dailyData = parseLifeCarData(csvText)
         
@@ -55,9 +68,7 @@ export function RollingAverageRatesChart() {
         }
         
         setChartData(rollingAvgData)
-      })
-      .catch(err => console.error('Failed to load data:', err))
-  }, [])
+  }
 
   return (
     <Card className="col-span-2">

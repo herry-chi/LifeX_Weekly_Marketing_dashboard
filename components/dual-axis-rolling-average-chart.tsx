@@ -1,14 +1,23 @@
 "use client"
 
 import React, { useMemo, useState } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea, Dot } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { LifeCarDailyData } from "@/lib/lifecar-data-processor"
 
+interface LifeCarNote {
+  发布时间: string
+  类型: string
+  名称: string
+  链接: string
+}
+
 interface DualAxisRollingAverageChartProps {
   data: LifeCarDailyData[]
   title?: string
+  selectedDates?: string[]
+  notesData?: LifeCarNote[]
 }
 
 interface RollingAverageData {
@@ -27,7 +36,11 @@ type MetricType = 'clicks' | 'likes' | 'followers'
 
 // Calculate 7-day rolling average (7 days before, 0 days after)
 function calculateRollingAverage(data: LifeCarDailyData[]): RollingAverageData[] {
-  const sortedData = [...data].sort((a, b) => a.date.localeCompare(b.date))
+  const sortedData = [...data].sort((a, b) => {
+    const dateA = typeof a.date === 'string' ? a.date : String(a.date);
+    const dateB = typeof b.date === 'string' ? b.date : String(b.date);
+    return dateA.localeCompare(dateB);
+  })
   const result: RollingAverageData[] = []
   
   for (let i = 0; i < sortedData.length; i++) {
@@ -103,13 +116,22 @@ function calculateNiceScale(minValue: number, maxValue: number, targetTicks: num
   }
 }
 
-export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Average Analysis: Cost & Metrics" }: DualAxisRollingAverageChartProps) {
+export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Average Analysis: Cost & Metrics", selectedDates = [], notesData = [] }: DualAxisRollingAverageChartProps) {
   // State for metric selection
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('clicks')
+
+  // Debug log for selectedDates and notesData
+  console.log('Chart received selectedDates:', selectedDates)
+  console.log('Chart received notesData:', notesData?.length || 0, 'posts')
   
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return []
-    return calculateRollingAverage(data)
+    const result = calculateRollingAverage(data)
+    // Debug log to check date format in chart data
+    if (result.length > 0) {
+      console.log('Chart data sample dates:', result.slice(0, 3).map(d => d.date))
+    }
+    return result
   }, [data])
   
   // Get current metric data and config
@@ -183,24 +205,75 @@ export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Avera
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
+  // Get posts for a specific date (only if the date is selected)
+  const getPostsForDate = (dateStr: string): LifeCarNote[] => {
+    if (!notesData || notesData.length === 0) {
+      console.log('No notes data available:', notesData)
+      return []
+    }
+
+    // Extract date part from dateStr (YYYY-MM-DD format)
+    const targetDate = dateStr.split(' ')[0]
+
+    // Check if this date is selected in the Posts modal
+    const isDateSelected = selectedDates.includes(targetDate)
+    console.log('Looking for posts on date:', targetDate, 'Selected:', isDateSelected)
+    console.log('Selected dates:', selectedDates)
+
+    if (!isDateSelected) {
+      console.log('Date not selected, returning empty posts')
+      return []
+    }
+
+    const matchingPosts = notesData.filter(note => {
+      const noteDate = note.发布时间.split(' ')[0] // Extract date part from "2025-09-11 12:59:29"
+      return noteDate === targetDate
+    })
+
+    console.log(`Found ${matchingPosts.length} posts for selected date ${targetDate}`)
+    return matchingPosts
+  }
+
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       // Find the data point for this date
       const dataPoint = chartData.find(d => d.date === label)
-      
+
+      // Get posts for this date
+      const postsForDate = getPostsForDate(label)
+
       // Format date nicely
-      const formattedDate = new Date(label).toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
+      const formattedDate = new Date(label).toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
       })
-      
+
       return (
-        <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-4 shadow-xl min-w-[220px]">
+        <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-4 shadow-xl min-w-[240px] max-w-[400px]">
           <p className="font-bold text-gray-900 mb-3 border-b pb-2">{formattedDate}</p>
-          
+
+          {/* Posts Section - Show only if there are posts for this date */}
+          {postsForDate.length > 0 && (
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-purple-600 mb-2">📝 Posts ({postsForDate.length})</p>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {postsForDate.map((post, index) => (
+                  <div key={index} className="text-xs bg-purple-50 rounded p-2">
+                    <p className="font-medium text-purple-800 truncate" title={post.名称}>
+                      {post.名称}
+                    </p>
+                    <p className="text-purple-600 text-xs">
+                      {post.类型} • {post.发布时间.split(' ')[1]?.substring(0, 5) || ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Cost Section */}
           <div className="mb-3">
             <p className="text-sm font-semibold text-pink-600 mb-1">💰 Cost</p>
@@ -208,7 +281,7 @@ export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Avera
               <span className="font-medium">7-day Avg:</span> ${dataPoint.spendAvg.toFixed(2)}
             </p>
           </div>
-          
+
           {/* Selected Metric Section */}
           <div>
             <p className="text-sm font-semibold mb-1" style={{ color: metricConfig.color }}>
@@ -228,8 +301,8 @@ export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Avera
     return (
       <Card className="bg-white/95 backdrop-blur-xl shadow-lg border border-gray-200/50">
         <CardHeader>
-          <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">
-            📈 {title}
+          <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -246,8 +319,8 @@ export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Avera
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-lg font-bold bg-gradient-to-r from-[#751FAE] to-[#EF3C99] bg-clip-text text-transparent font-montserrat">
-              📈 7-Day Rolling Average Analysis: Cost & {metricConfig.label}
+            <CardTitle className="text-xl font-semibold text-gray-900 mb-6 font-montserrat">
+              7-Day Rolling Average Analysis: Cost & {metricConfig.label}
             </CardTitle>
             <p className="text-sm text-gray-600 font-montserrat font-light mt-1">
               7-day rolling average comparison analysis. Left Y-axis: Cost, Right Y-axis: {metricConfig.label}
@@ -339,7 +412,6 @@ export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Avera
               />
               
               <Tooltip content={<CustomTooltip />} />
-              <Legend />
               
               {/* 7-day Cost Rolling Average - Left axis */}
               <Line
@@ -348,7 +420,23 @@ export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Avera
                 dataKey="spendAvg"
                 stroke="#751FAE"
                 strokeWidth={3}
-                dot={false}
+                dot={(props: any) => {
+                  if (selectedDates.length > 0 && props.payload && selectedDates.includes(props.payload.date)) {
+                    return (
+                      <line
+                        x1={props.cx}
+                        y1={30}
+                        x2={props.cx}
+                        y2={310}
+                        stroke="#6B7280"
+                        strokeWidth={2}
+                        strokeDasharray="4 4"
+                        opacity={0.8}
+                      />
+                    );
+                  }
+                  return false;
+                }}
                 name="7-day Cost Rolling Avg"
                 connectNulls={false}
               />
@@ -364,8 +452,27 @@ export function DualAxisRollingAverageChart({ data, title = "7-Day Rolling Avera
                 name={metricConfig.name}
                 connectNulls={false}
               />
+              
             </LineChart>
           </ResponsiveContainer>
+        </div>
+        
+        {/* Custom Legend */}
+        <div className="flex items-center justify-center gap-3 mt-4 text-sm">
+          <span className="text-black font-medium">7 Days Rolling Avg</span>
+          <span className="text-gray-500">→</span>
+          
+          {/* Cost Legend */}
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: '#751FAE' }}></div>
+            <span style={{ color: '#751FAE' }} className="font-medium">Cost</span>
+          </div>
+          
+          {/* Metric Legend */}
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: metricConfig.color }}></div>
+            <span style={{ color: metricConfig.color }} className="font-medium">{metricConfig.label}</span>
+          </div>
         </div>
       </CardContent>
     </Card>
